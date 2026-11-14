@@ -1,0 +1,114 @@
+# Field Shift - .gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+backend/.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Database
+*.sqlite
+*.db
+
+# Cache
+.cache/
+.pytest_cache/
+.coverage/
+htmlcov/
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Build outputs
+dist/
+build/
+*.tsbuildinfo
+
+# Docker
+.docker/
+
+# Test artifacts
+coverage/
+.nyc_output/
+
+# Temporary files
+*.tmp
+*.temp
+.tmp/
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+
+# Secrets (never commit!)
+*.pem
+*.key
+*.crt
+secrets/
+credentials/
+
+# Large data files
+*.tif
+*.tiff
+*.nc
+*.hdf
+*.h5
+*.zip
+data/downloads/
+data/cache/

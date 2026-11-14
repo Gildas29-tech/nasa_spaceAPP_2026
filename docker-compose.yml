@@ -1,0 +1,126 @@
+# Field Shift - Docker Compose
+# NASA Space Apps Challenge 2026
+
+version: '3.8'
+
+services:
+  # Backend API Service
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: field-shift-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - APP_ENV=production
+      - DEBUG=false
+      - EARTHDATA_USERNAME=${EARTHDATA_USERNAME}
+      - EARTHDATA_PASSWORD=${EARTHDATA_PASSWORD}
+      - COPERNICUS_USERNAME=${COPERNICUS_USERNAME}
+      - COPERNICUS_PASSWORD=${COPERNICUS_PASSWORD}
+      - USGS_USERNAME=${USGS_USERNAME}
+      - USGS_PASSWORD=${USGS_PASSWORD}
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/fieldshift
+      - REDIS_URL=redis://redis:6379/0
+      - CACHE_TTL=3600
+    volumes:
+      - ./backend:/app
+      - backend_cache:/home/app/.cache
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - fieldshift-network
+
+  # Frontend Service
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: field-shift-frontend
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - VITE_API_URL=http://localhost:8000
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - fieldshift-network
+
+  # PostgreSQL Database
+  db:
+    image: postgres:15-alpine
+    container_name: field-shift-db
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=fieldshift
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/migrations:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - fieldshift-network
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: field-shift-redis
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - fieldshift-network
+
+  # Development overrides (use docker-compose -f docker-compose.yml -f docker-compose.dev.yml up)
+  # Uncomment the following for development with hot reload
+  # backend-dev:
+  #   build:
+  #     context: ./backend
+  #     dockerfile: Dockerfile.dev
+  #   container_name: field-shift-backend-dev
+  #   ports:
+  #     - "8000:8000"
+  #   environment:
+  #     - APP_ENV=development
+  #     - DEBUG=true
+  #     - EARTHDATA_USERNAME=${EARTHDATA_USERNAME}
+  #     - EARTHDATA_PASSWORD=${EARTHDATA_PASSWORD}
+  #   volumes:
+  #     - ./backend:/app
+  #   command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+  #   depends_on:
+  #     - db
+  #     - redis
+  #   networks:
+  #     - fieldshift-network
+
+networks:
+  fieldshift-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  backend_cache:

@@ -1,0 +1,18 @@
+# Field Shift Frontend - Development Dockerfile
+# Includes hot reload via Vite
+
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Install dependencies
+COPY package*.json ./
+RUN npm ci
+
+# Copy source code
+COPY . .
+
+EXPOSE 5173
+
+# Run Vite dev server with host flag for Docker
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
