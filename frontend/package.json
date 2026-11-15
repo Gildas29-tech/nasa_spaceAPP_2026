@@ -14,7 +14,7 @@
     "@tanstack/react-query-devtools": "^5.107.1",
     "axios": "^1.6.0",
     "clsx": "^2.1.0",
-    "date-fns": "^3.2.0",
+    "date-fns": "^4.4.0",
     "lucide-react": "^0.303.0",
     "maplibre-gl": "^4.7.0",
     "react": "^18.2.0",
