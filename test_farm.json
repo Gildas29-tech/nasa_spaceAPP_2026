@@ -1,0 +1,12 @@
+{
+  "name": "Test Farm Iowa",
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [[
+      [-93.5, 42.0], [-93.4, 42.0], [-93.4, 42.1], [-93.5, 42.1], [-93.5, 42.0]
+    ]]
+  },
+  "centroid": {"latitude": 42.05, "longitude": -93.45},
+  "description": "Corn/soybean farm in Iowa",
+  "crops_of_interest": ["maize", "soybean"]
+}

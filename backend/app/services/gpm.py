@@ -197,8 +197,11 @@ async def get_gpm_precipitation(
     end_date: str,
     accumulate_daily: bool = True,
 ) -> NASADataResult:
-    """Quick function to get GPM precipitation."""
-    service = GPMService()
+    """Quick function to get GPM precipitation.
+
+    Uses GPM_3IMERGDE (Daily Early Run) for better coverage and daily accumulation.
+    """
+    service = GPMService(product="GPM_3IMERGDE")  # Daily Early Run product
     if accumulate_daily:
         return await service.get_daily_accumulation(bbox, start_date, end_date)
     return await service.get_precipitation(bbox, start_date, end_date)

@@ -1,239 +1,210 @@
 # Field Shift: Adapting Farms with NASA Data
 
-> **NASA Space Apps Challenge 2026** — Decision-support tool combining NASA Earth observations with local soil data, crop characteristics, and farmer priorities to explore resilient crop rotation strategies.
+> **NASA Space Apps Challenge 2026** — *Advanced/Intermediate* — *Earth Science, Software, Arts & Multimedia*
 
-[![Build Status](https://github.com/your-org/field-shift/workflows/CI/CD%20Pipeline/badge.svg)](https://github.com/your-org/field-shift/actions)
-[![Security Scan](https://github.com/your-org/field-shift/workflows/Security%20Scan/badge.svg)](https://github.com/your-org/field-shift/actions)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+A decision-support tool that combines NASA Earth observations with local soil data, crop characteristics, and farmer priorities to help farmers explore resilient crop rotation strategies that strengthen soil health and adapt farms to changing climate conditions.
 
-## Overview
+## 🌾 The Challenge
 
-Field Shift helps farmers and agronomists make data-driven decisions about crop rotations by integrating multi-source NASA satellite data with local farm conditions. The platform provides:
+Farmers worldwide face:
+- **Shifting temperatures** and changing rainfall patterns
+- **Water shortages** and increasing drought frequency
+- **Extreme weather events** (floods, heatwaves, storms)
+- **Declining soil health** from intensive monoculture
 
-- **Soil Health Analysis** — Composite index (0-100) from SMAP, MODIS, Landsat, and GPM data
-- **Crop Rotation Optimizer** — Multi-objective optimization balancing profit, soil health, water conservation, and risk
-- **Yield Prediction** — Physics-based and ML models with uncertainty quantification
-- **Water Stress Monitoring** — Early warning system using ECOSTRESS, SMAP, and GPM data
-- **Interactive Field Mapping** — MapLibre GL visualization with NASA data layers
+**Our Mission**: Build an intuitive, data-driven tool that empowers farmers to explore crop rotation strategies using NASA's Earth observation data combined with local knowledge.
 
-## Data Sources
-
-| Source | Data Type | Resolution | Access |
-|--------|-----------|------------|--------|
-| **NASA POWER** | Climate (temp, precip, humidity, radiation, wind) | 0.5° daily | Open |
-| **Sentinel-2 (MSI)** | Surface reflectance, NDVI, EVI, SAVI | 10-60m, 5-day | Copernicus (OAuth2) |
-| **Landsat 8/9** | Surface reflectance, LST, spectral indices | 30m, 16-day | USGS STAC |
-| **GPM IMERG** | Precipitation (half-hourly/daily) | 0.1° | GES DISC |
-| **SMAP** | Surface & root-zone soil moisture | 9km, 2-3 day | NSIDC/AppEEARS |
-| **ECOSTRESS** | ET, water stress, ESI | 70m, irregular | LP DAAC |
-| **FAO GAEZ v4** | Crop suitability, yield potential | 5 arc-min | Open |
-
-## Architecture
-
-```
-┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
-│   Frontend      │────▶│   Backend API    │────▶│  Data Connectors │
-│   (React/TS)    │     │   (FastAPI)      │     │  (NASA/FAO)     │
-└─────────────────┘     └──────────────────┘     └─────────────────┘
-                              │
-                    ┌─────────┼─────────┐
-                    ▼         ▼         ▼
-               ┌────────┐ ┌────────┐ ┌────────┐
-               │Postgres│ │ Redis  │ │ ML     │
-               │(Farms) │ │(Cache) │ │Models  │
-               └────────┘ └────────┘ └────────┘
-```
-
-### Backend (FastAPI)
-- **Modular connector architecture** — Independent modules per data source
-- **Async data collection** — Concurrent fetching with graceful degradation
-- **In-memory TTL cache** — Reduces API calls to NASA services
-- **Pydantic models** — Type-safe request/response validation
-- **ML models** — Physics-based fallbacks when training data unavailable
-
-### Frontend (React + Vite + TypeScript)
-- **Zustand** — Client state (auth, farms, UI)
-- **TanStack Query** — Server state with caching & polling
-- **MapLibre GL** — Interactive field mapping
-- **Tailwind CSS** — Responsive, accessible UI components
-- **Chart.js / Recharts** — Data visualization
-
-## Quick Start
+##  Quick Start
 
 ### Prerequisites
-- Docker & Docker Compose
-- Node.js 20+ (for frontend development)
-- Python 3.11+ (for backend development)
-- NASA Earthdata credentials (for authenticated data sources)
+- Python 3.10+
+- [NASA Earthdata Login](https://urs.earthdata.nasa.gov/users/new) (free account)
+- Node.js 18+ (for web frontend)
 
-### Using Docker (Recommended)
+### Installation
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/field-shift.git
-cd field-shift
+git clone https://github.com/yourusername/nasa-space-apps-2026.git
+cd nasa-space-apps-2026
 
-# Copy environment template and configure credentials
-cp backend/.env.example .env
-# Edit .env with your NASA Earthdata, Copernicus, USGS credentials
-
-# Start all services
-docker-compose up -d
-
-# Access the application
-# Frontend: http://localhost
-# Backend API: http://localhost:8000
-# API Docs: http://localhost:8000/docs
-```
-
-### Development Mode
-
-```bash
-# Backend
-cd backend
-cp .env.example .env
+# Backend setup
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8000
 
-# Frontend (in separate terminal)
+# Frontend setup
 cd frontend
 npm install
 npm run dev
-
-# With hot reload via Docker
-docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
 ```
 
-## Configuration
+### Configuration
 
-### Environment Variables
+```bash
+# Copy environment template
+cp .env.example .env
 
-Create `.env` from `backend/.env.example`:
-
-```env
-# NASA Earthdata (required for SMAP, GPM, ECOSTRESS, Landsat)
-EARTHDATA_USERNAME=your_username
-EARTHDATA_PASSWORD=your_password
-
-# Copernicus Data Space (required for Sentinel-2)
-COPERNICUS_USERNAME=your_username
-COPERNICUS_PASSWORD=your_password
-
-# USGS (required for Landsat)
-USGS_USERNAME=your_username
-USGS_PASSWORD=your_password
-
-# Database & Cache
-DATABASE_URL=postgresql://postgres:postgres@db:5432/fieldshift
-REDIS_URL=redis://redis:6379/0
-
-# App
-APP_ENV=production
-DEBUG=false
-CACHE_TTL=3600
+# Edit with your credentials
+# EARTHDATA_USERNAME=your_username
+# EARTHDATA_PASSWORD=your_password
+# NASA_API_KEY=your_nasa_api_key (optional, for higher rate limits)
 ```
 
-### Getting Credentials
+##  NASA Datasets Integrated
 
-1. **NASA Earthdata** — Register at [urs.earthdata.nasa.gov](https://urs.earthdata.nasa.gov)
-2. **Copernicus Data Space** — Register at [dataspace.copernicus.eu](https://dataspace.copernicus.eu)
-3. **USGS EarthExplorer** — Register at [earthexplorer.usgs.gov](https://earthexplorer.usgs.gov)
+| Dataset | Source | Resolution | Variables | Access Method |
+|---------|--------|------------|-----------|---------------|
+| **SMAP** | NASA JPL | 9 km / 1 km | Soil moisture (surface/root zone), freeze/thaw | `earthaccess`, Harmony, Direct HTTPS |
+| **NASA-USDA Soil Moisture** | GSFC/USDA | 0.25° | Global agricultural soil moisture | HTTPS/THREDDS |
+| **Crop-CASMA** | USDA/NASA | 1 km | Crop condition, soil moisture anomalies | REST API |
+| **MODIS (Terra/Aqua)** | NASA | 250m–1km | NDVI, EVI, LST, Land Cover, LAI, FPAR | `earthaccess`, LAADS DAAC |
+| **Landsat 8/9** | USGS/NASA | 30 m | Surface reflectance, NDVI, ET, crop health | `earthaccess`, AWS PDS |
+| **GPM/IMERG** | NASA/JAXA | 0.1° / 30 min | Precipitation rate, accumulation | `earthaccess`, GES DISC |
+| **ECOSTRESS** | NASA JPL | 70 m | Evapotranspiration, water stress, LST | `earthaccess`, LP DAAC |
+| **OpenET** | NASA/USGS/DRI | 30 m | Field-scale evapotranspiration | REST API |
+| **ATLAS/ICESat-2 ATL24** | NSIDC | Along-track | Coastal bathymetry, seafloor height | `earthaccess`, `icepyx`, SlideRule |
 
-## API Documentation
-
-Once the backend is running, visit:
-- **Swagger UI**: `http://localhost:8000/docs`
-- **ReDoc**: `http://localhost:8000/redoc`
-- **OpenAPI JSON**: `http://localhost:8000/openapi.json`
-
-### Key Endpoints
-
-```
-POST   /api/v1/data/farms              # Create farm
-GET    /api/v1/data/farms              # List farms
-GET    /api/v1/data/farms/{id}         # Get farm
-DELETE /api/v1/data/farms/{id}         # Delete farm
-
-POST   /api/v1/data/collect            # Trigger data collection
-GET    /api/v1/data/collect/{id}/status # Poll collection status
-GET    /api/v1/data/collect/{id}/summary # Dashboard summary
-
-GET    /api/v1/data/sources            # List available data sources
-
-POST   /api/v1/analysis/soil-health    # Soil health analysis
-POST   /api/v1/analysis/rotation       # Crop rotation optimization
-POST   /api/v1/analysis/yield          # Yield prediction
-POST   /api/v1/analysis/water-stress   # Water stress analysis
-```
-
-## Project Structure
+##  Project Structure
 
 ```
-field-shift/
-├── backend/
+nasa-space-apps-2026/
+├── backend/                    # FastAPI backend
 │   ├── app/
-│   │   ├── api/routes/           # FastAPI route handlers
-│   │   ├── connectors/           # NASA/FAO data connectors
-│   │   ├── core/                 # Config, cache, auth
-│   │   ├── ml/                   # ML models (soil health, rotation, yield, water stress)
-│   │   ├── services/             # Business logic, data collection orchestrator
-│   │   └── main.py               # FastAPI app factory
-│   ├── tests/                    # Unit & integration tests
-│   ├── requirements.txt
-│   ├── Dockerfile
-│   └── .env.example
-├── frontend/
+│   │   ├── api/               # API routes
+│   │   ├── core/              # Config, security
+│   │   ├── models/            # Pydantic models
+│   │   ├── services/          # Data access services
+│   │   │   ├── nasa_earthdata.py
+│   │   │   ├── smap.py
+│   │   │   ├── modis.py
+│   │   │   ├── landsat.py
+│   │   │   ├── crop_casma.py
+│   │   │   ├── gpm.py
+│   │   │   ├── ecostress.py
+│   │   │   ├── openet.py
+│   │   │   └── atl24.py
+│   │   ├── ml/                # ML models for crop rotation
+│   │   │   ├── soil_health.py
+│   │   │   ├── rotation_optimizer.py
+│   │   │   └── yield_predictor.py
+│   │   └── utils/
+│   ├── tests/
+│   └── requirements.txt
+├── frontend/                   # React + Vite + TypeScript
 │   ├── src/
-│   │   ├── components/ui/        # Reusable UI components
-│   │   ├── hooks/                # Custom React hooks (TanStack Query)
-│   │   ├── pages/                # Page components
-│   │   ├── store/                # Zustand stores
-│   │   ├── lib/                  # API client, utilities
-│   │   └── App.tsx               # Main app with routing
-│   ├── tests/                    # Component tests
-│   ├── Dockerfile
-│   └── nginx.conf
-├── docker-compose.yml
-├── docker-compose.dev.yml
-└── .github/workflows/            # CI/CD pipelines
+│   │   ├── components/        # Reusable UI components
+│   │   ├── pages/             # Page components
+│   │   ├── hooks/             # Custom React hooks
+│   │   ├── services/          # API clients
+│   │   ├── stores/            # State management (Zustand)
+│   │   ├── types/             # TypeScript types
+│   │   └── utils/
+│   ├── public/
+│   └── package.json
+├── data/                       # Data pipelines & scripts
+│   ├── scripts/
+│   │   ├── download_smap.py
+│   │   ├── download_modis.py
+│   │   ├── download_landsat.py
+│   │   ├── download_gpm.py
+│   │   ├── download_ecostress.py
+│   │   ├── download_atl24.py
+│   │   └── process_crop_casma.py
+│   ├── pipelines/
+│   │   ├── soil_moisture_pipeline.py
+│   │   ├── vegetation_index_pipeline.py
+│   │   └── precipitation_pipeline.py
+│   └── cache/                 # Local data cache (gitignored)
+├── notebooks/                  # Jupyter exploration notebooks
+│   ├── 01_data_exploration.ipynb
+│   ├── 02_soil_moisture_analysis.ipynb
+│   ├── 03_crop_rotation_modeling.ipynb
+│   └── 04_dashboard_prototype.ipynb
+├── docs/                       # Documentation
+│   ├── architecture.md
+│   ├── data_sources.md
+│   ├── api_reference.md
+│   └── deployment.md
+├── docker/
+│   ├── Dockerfile.backend
+│   ├── Dockerfile.frontend
+│   └── docker-compose.yml
+├── .github/
+│   └── workflows/
+│       ├── ci.yml
+│       └── deploy.yml
+├── .env.example
+├── .gitignore
+├── requirements.txt
+├── pyproject.toml
+└── README.md
 ```
 
-## Testing
+##  Data Access Layer
 
-```bash
-# Backend tests
-cd backend
-pytest tests/ -v --cov=app
+All NASA data access is abstracted behind clean service interfaces:
 
-# Frontend tests
-cd frontend
-npm run test
-npm run test:e2e
+```python
+# Example: Accessing SMAP soil moisture
+from backend.app.services.smap import SMAPService
+
+smap = SMAPService()
+data = smap.get_soil_moisture(
+    bbox=[-122.5, 37.5, -121.5, 38.5],  # San Francisco Bay Area
+    start_date="2024-01-01",
+    end_date="2024-12-31",
+    variable="soil_moisture_am"  # Morning pass
+)
+
+# Example: Crop rotation optimization
+from backend.app.ml.rotation_optimizer import CropRotationOptimizer
+
+optimizer = CropRotationOptimizer()
+recommendations = optimizer.optimize(
+    location=(37.7749, -122.4194),
+    current_crops=["corn", "soybean"],
+    soil_type="clay_loam",
+    climate_zone="mediterranean",
+    farmer_priorities={"water_conservation": 0.4, "profit": 0.3, "soil_health": 0.3}
+)
 ```
 
-## Deployment
+## 🌐 Web Application
 
-### Production Build
+Modern, responsive farmer-facing dashboard built with:
+- **React 18** + **TypeScript** + **Vite**
+- **Tailwind CSS** for clean, accessible UI
+- **MapLibre GL** for interactive maps
+- **Recharts** / **Chart.js** for data visualization
+- **Zustand** for lightweight state management
+- **React Query** for server state
 
-```bash
-# Build Docker images
-docker-compose build
+### Key Features
+-  **Interactive Farm Mapping** — Draw field boundaries, view NASA data layers
+- 📈 **Soil Health Dashboard** — Real-time moisture, vegetation, stress indicators
+- 🔄 **Crop Rotation Explorer** — Compare rotation scenarios with projected outcomes
+- 💧 **Water Management** — Irrigation scheduling based on SMAP + GPM + OpenET
+- 📱 **Mobile-First** — Works in the field on phone/tablet
+- 🌍 **Multi-language** — English, Spanish, French (extensible)
 
-# Push to registry
-docker-compose push
+##  Machine Learning Models
 
-# Deploy to Kubernetes (example)
-kubectl apply -f k8s/
-```
+| Model | Purpose | Input Features | Output |
+|-------|---------|----------------|--------|
+| **Soil Health Index** | Composite soil health score | SMAP, MODIS, soil texture, OM, pH | 0–100 score + factors |
+| **Rotation Optimizer** | Recommend optimal crop sequences | Climate, soil, market, farmer prefs | Ranked rotations + metrics |
+| **Yield Predictor** | Estimate yields per crop/rotation | Historical yields, weather, soil, mgmt | Yield distribution + risk |
+| **Water Stress Detector** | Early warning for drought stress | ECOSTRESS, SMAP, GPM, NDVI | Stress level + lead time |
 
-### CI/CD Pipeline
+##  Documentation
 
-The repository includes GitHub Actions workflows:
-- **CI Pipeline** — Lint, type-check, test, build
-- **Security Scan** — Dependency audit, SAST (CodeQL), container scan (Trivy), secret scan
-- **Dependabot** — Automated dependency updates
+- [Architecture Overview](docs/architecture.md)
+- [Data Sources & Access](docs/data_sources.md)
+- [API Reference](docs/api_reference.md)
+- [Deployment Guide](docs/deployment.md)
 
-## Contributing
+##  Contributing
 
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)
@@ -241,30 +212,20 @@ The repository includes GitHub Actions workflows:
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
 
-Please read [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
+##  License
 
-## License
+This project is licensed under the MIT License — see [LICENSE](LICENSE) for details.
 
-This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
+##  Acknowledgments
 
-## Acknowledgments
+- **NASA Earth Science Division** for open data access
+- **NSIDC DAAC** for ICESat-2 ATL24 data
+- **USDA NASS** for Crop-CASMA collaboration
+- **Space Apps Challenge** organizers and community
+- All open-source contributors
 
-- **NASA** for providing open Earth observation data
-- **ESA/Copernicus** for Sentinel-2 data access
-- **USGS** for Landsat data
-- **FAO** for GAEZ crop suitability data
-- **NASA Space Apps Challenge 2026** organizers and partners
 
-## Partners & Resources
 
-- [NASA Space Apps Challenge 2026](https://www.spaceappschallenge.org/)
-- [NASA Earthdata](https://earthdata.nasa.gov/)
-- [Copernicus Data Space Ecosystem](https://dataspace.copernicus.eu/)
-- [Microsoft Azure Space Apps Offer](https://azure.microsoft.com/)
-- [Google Cloud Space Apps Offer](https://cloud.google.com/)
-- [Planetary Computer](https://planetarycomputer.microsoft.com/)
-- [Meteomatics Weather API](https://www.meteomatics.com/)
+**Built for NASA Space Apps Challenge 2026** — *Field Shift: Adapting Farms with NASA Data*
 
----
-
-**Built for NASA Space Apps Challenge 2026** — "Field Shift: Adapting Farms with NASA Data"
+*Empowering farmers with Earth observation data for a more resilient agricultural future.*

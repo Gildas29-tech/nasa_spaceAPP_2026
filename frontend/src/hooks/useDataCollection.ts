@@ -56,6 +56,11 @@ export type CollectionSummary = ApiCollectionSummary;
 export type CollectionResult = ApiCollectionResult;
 
 function mapFarmResponse(farm: FarmResponse): Farm {
+  // Handle both backend (latitude/longitude) and frontend (lat/lon) formats
+  const centroid = farm.centroid
+  const lat = 'latitude' in centroid ? centroid.latitude : centroid.lat
+  const lon = 'longitude' in centroid ? centroid.longitude : centroid.lon
+
   return {
     id: farm.id,
     name: farm.name,
@@ -63,7 +68,7 @@ function mapFarmResponse(farm: FarmResponse): Farm {
     area: 'Unknown',
     location: farm.description,
     geometry: farm.geometry,
-    centroid: farm.centroid,
+    centroid: { lat, lon },
     description: farm.description,
     crops_of_interest: farm.crops_of_interest,
     createdAt: farm.created_at,

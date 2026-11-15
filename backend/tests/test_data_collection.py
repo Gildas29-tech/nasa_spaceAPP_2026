@@ -394,8 +394,12 @@ class TestIndividualCollectors:
             metadata={},
         )
 
-        with patch('app.services.data_collection.get_landsat_ndvi', new_callable=AsyncMock) as mock_get:
-            mock_get.return_value = mock_result
+        with patch('app.services.data_collection.catalog_earthdata', new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = DataSourceResult(
+                source="Landsat",
+                status=DataSourceStatus.SUCCESS,
+                data={"granule_count": 1, "product": "HLSL30"},
+            )
 
             result = await collect_landsat(
                 {"type": "Polygon", "coordinates": [[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]]},
@@ -405,27 +409,17 @@ class TestIndividualCollectors:
 
             assert result.status == DataSourceStatus.SUCCESS
             assert result.source == "Landsat"
-            assert result.data is not None
-            assert "ndvi" in result.data
+            assert result.data["product"] == "HLSL30"
 
     @pytest.mark.asyncio
     async def test_collect_gaez_placeholder(self):
-        """Test GAEZ returns placeholder when not implemented."""
-        with patch('app.services.data_collection.get_multiple_crop_suitability', new_callable=AsyncMock) as mock_suit, \
-             patch('app.services.data_collection.get_agroclimatic_data', new_callable=AsyncMock) as mock_agro:
+        """Suitability is scored from the crop library for the farm point."""
+        result = await collect_gaez(6.16, 1.23, ["maize", "sorghum"])
 
-            mock_suit.return_value = {
-                "results": {
-                    "maize": {"suitability": {"index": None}},
-                    "wheat": {"suitability": {"index": None}},
-                }
-            }
-            mock_agro.return_value = {}
-
-            result = await collect_gaez(38.05, -119.95, ["maize", "wheat"])
-
-            assert result.status == DataSourceStatus.UNAVAILABLE
-            assert "not yet implemented" in result.error.lower()
+        assert result.status == DataSourceStatus.SUCCESS
+        ranked = result.data["suitability"]["ranked_crops"]
+        assert ranked[0]["crop"] in {"sorghum", "maize", "corn"}
+        assert ranked[0]["suitability"]["index"] > 0
 
 
 class TestDataModels:

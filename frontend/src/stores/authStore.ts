@@ -66,14 +66,6 @@ export const useAuthStore = create<AuthState>()(
   )
 )
 
-// Initialize auth token from localStorage
-if (typeof window !== 'undefined') {
-  const token = localStorage.getItem('auth_token')
-  if (token) {
-    useAuthStore.setState({ token, isAuthenticated: true })
-  }
-}
-
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   return children
 }

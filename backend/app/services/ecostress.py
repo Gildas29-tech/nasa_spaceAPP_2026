@@ -39,9 +39,9 @@ class ECOSTRESSService(NASAEarthdataBase):
         "ECOL3ESI": "L3 Evaporative Stress Index (70m)",
     }
 
-    DEFAULT_PRODUCT = "ECOL2EST"
+    DEFAULT_PRODUCT = "ECO_L2T_LSTE"
 
-    def __init__(self, product: str = DEFAULT_PRODUCT, version: str = "002"):
+    def __init__(self, product: str = DEFAULT_PRODUCT, version: str = ""):
         super().__init__(product, version)
         self.product = product
         self.variables = DATASET_VARIABLES.get(product, {

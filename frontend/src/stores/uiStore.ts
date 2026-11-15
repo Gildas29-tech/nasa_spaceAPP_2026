@@ -85,16 +85,3 @@ export const useUIStore = create<UIState>()(
     }
   )
 )
-
-// Initialize dark mode from store on app load
-if (typeof window !== 'undefined') {
-  const stored = localStorage.getItem('ui-store')
-  if (stored) {
-    try {
-      const { state } = JSON.parse(stored)
-      if (state?.darkMode) {
-        document.documentElement.classList.add('dark')
-      }
-    } catch {}
-  }
-}

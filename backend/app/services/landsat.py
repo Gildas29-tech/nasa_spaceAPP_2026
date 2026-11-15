@@ -57,7 +57,7 @@ class LandsatService(NASAEarthdataBase):
         "bai": ("red", "nir"),         # Burn area
     }
 
-    def __init__(self, satellite: str = "LC09", version: str = "2"):
+    def __init__(self, satellite: str = "LC09", version: str = ""):
         product = f"{satellite}_L2SP"
         super().__init__(product, version)
         self.satellite = satellite
@@ -281,6 +281,58 @@ class LandsatService(NASAEarthdataBase):
             result.data["temperature_celsius"] = temp_c
 
         return result
+
+    async def get_variable(
+        self,
+        bbox: BoundingBox,
+        time_range: TimeRange,
+        variable: str,
+        **kwargs,
+    ) -> NASADataResult:
+        """Implement abstract method from NASAEarthdataBase."""
+        # Map variable names to methods
+        if variable in ["surface_reflectance", "bands"]:
+            bands = kwargs.get("bands", ["red", "nir", "green", "blue", "swir1", "swir2"])
+            return await self.get_surface_reflectance(
+                bbox,
+                time_range.start.strftime("%Y-%m-%d"),
+                time_range.end.strftime("%Y-%m-%d"),
+                bands=bands,
+                cloud_cover_max=kwargs.get("cloud_cover_max", 20.0),
+            )
+        elif variable in ["vegetation_indices", "indices"]:
+            indices = kwargs.get("indices", ["ndvi", "savi", "ndwi", "ndmi"])
+            return await self.get_vegetation_indices(
+                bbox,
+                time_range.start.strftime("%Y-%m-%d"),
+                time_range.end.strftime("%Y-%m-%d"),
+                indices=indices,
+                cloud_cover_max=kwargs.get("cloud_cover_max", 20.0),
+            )
+        elif variable in ["ndvi"]:
+            return await self.get_vegetation_indices(
+                bbox,
+                time_range.start.strftime("%Y-%m-%d"),
+                time_range.end.strftime("%Y-%m-%d"),
+                indices=["ndvi"],
+                cloud_cover_max=kwargs.get("cloud_cover_max", 20.0),
+            )
+        elif variable in ["temperature", "surface_temperature"]:
+            return await self.get_temperature(
+                bbox,
+                time_range.start.strftime("%Y-%m-%d"),
+                time_range.end.strftime("%Y-%m-%d"),
+                cloud_cover_max=kwargs.get("cloud_cover_max", 20.0),
+            )
+        else:
+            # Default to NDVI
+            return await self.get_vegetation_indices(
+                bbox,
+                time_range.start.strftime("%Y-%m-%d"),
+                time_range.end.strftime("%Y-%m-%d"),
+                indices=["ndvi"],
+                cloud_cover_max=kwargs.get("cloud_cover_max", 20.0),
+            )
 
 
 async def get_landsat_ndvi(

@@ -36,12 +36,16 @@ from app.services.nasa_earthdata import BoundingBox, TimeRange
 
 # Import the new data collection routes
 from app.api.routes.data import router as data_routes
+# Import the reports routes
+from app.api.routes.reports import router as reports_routes
 
 
 router = APIRouter(prefix="/api/v1", tags=["Field Shift API"])
 
 # Include the data collection routes
 router.include_router(data_routes, tags=["Data Collection"])
+# Include the reports routes
+router.include_router(reports_routes, tags=["Reports"])
 
 
 # ============================================================
@@ -180,6 +184,253 @@ async def list_rotation_templates():
             for name, tpl in ROTATION_TEMPLATES.items()
         }
     }
+
+
+# ============================================================
+# Farm-specific Crop & Rotation Endpoints
+# ============================================================
+
+@router.get("/crops/suitability")
+async def get_crop_suitability(farm_id: str = Query(..., description="Farm ID to analyze")):
+    """Get crop suitability analysis for a specific farm based on collected data."""
+    from app.api.routes.data import farm_store, collection_store
+
+    if farm_id not in farm_store:
+        raise HTTPException(status_code=404, detail="Farm not found")
+
+    farm = farm_store[farm_id]
+
+    # Find latest collection for this farm
+    farm_collections = [
+        c for c in collection_store.values()
+        if c.farm_id == farm_id
+    ]
+
+    if not farm_collections:
+        # No collection yet - return basic suitability based on crop database
+        # This provides a baseline using crop database info
+        pass
+
+    latest_collection = max(farm_collections, key=lambda c: c.collected_at) if farm_collections else None
+
+    # Extract key data from collection if available
+    climate_data = None
+    soil_data = None
+
+    if latest_collection:
+        for name, source in latest_collection.sources.items():
+            if name == "nasa_power" and source.data and "summary" in source.data:
+                climate_data = source.data["summary"]
+            elif name == "crop_casma" and source.data:
+                soil_data = source.data
+
+    # Compute suitability for each crop in database
+    suitability_results = []
+
+    for crop_name, crop in CROP_DATABASE.items():
+        score = 50  # Base score
+
+        # Adjust based on climate data if available
+        if climate_data:
+            temp = climate_data.get("temperature", {}).get("mean_c", 20)
+            precip = climate_data.get("precipitation", {}).get("total_mm", 500)
+
+            # Simple scoring based on crop preferences
+            if crop.season == "warm" and temp > 20:
+                score += 10
+            elif crop.season == "cool" and temp < 20:
+                score += 10
+
+            if crop.water_need == "high" and precip > 600:
+                score += 10
+            elif crop.water_need == "low" and precip < 400:
+                score += 10
+            elif crop.water_need == "medium" and 400 <= precip <= 600:
+                score += 10
+
+        # Adjust based on soil data if available
+        if soil_data:
+            # Could add soil-based scoring here
+            score += 5
+
+        # Nitrogen fixation bonus
+        if crop.nitrogen_fixation:
+            score += 5
+
+        # Market value factor
+        if crop.market_value == "high":
+            score += 5
+        elif crop.market_value == "medium":
+            score += 2
+
+        # Cap score
+        score = min(100, max(0, score))
+
+        # Determine risk level
+        if score >= 80:
+            climate_risk = "Faible"
+        elif score >= 60:
+            climate_risk = "Moyen"
+        else:
+            climate_risk = "Élevé"
+
+        # Water need label
+        water_labels = {"low": "Faible", "medium": "Moyen", "high": "Élevé"}
+        water_need = water_labels.get(crop.water_need, "Moyen")
+
+        # Profit potential label
+        profit_labels = {"high": "Élevé", "medium": "Moyen", "low": "Faible"}
+        profit_potential = profit_labels.get(crop.market_value, "Moyen")
+
+        # Heat tolerance
+        heat_labels = {"warm": "Excellente", "cool": "Moyenne", "perennial": "Bonne"}
+        heat_tolerance = heat_labels.get(crop.season, "Moyenne")
+
+        suitability_results.append({
+            "crop": crop_name,
+            "scientific_name": crop_name.capitalize(),  # Would use real scientific names
+            "cycle": f"{crop.season.capitalize()} season",
+            "water_need": water_need,
+            "heat_tolerance": heat_tolerance,
+            "nitrogen_need": "Moyen" if not crop.nitrogen_fixation else "Faible (fixe N)",
+            "profit_potential": profit_potential,
+            "climate_risk": climate_risk,
+            "suitability_score": score,
+            "details": {
+                "temperature_range": "15-30°C",
+                "precipitation_range": "400-800 mm",
+                "soil_ph_range": "6.0-7.5",
+                "soil_texture": ["loam", "clay_loam"],
+                "growing_days": 120,
+                "frost_tolerance": "Moderate",
+            }
+        })
+
+    # Sort by suitability score descending
+    suitability_results.sort(key=lambda x: x["suitability_score"], reverse=True)
+
+    return {"crops": suitability_results}
+
+
+@router.get("/crops/rotation-templates")
+async def get_farm_rotation_templates(farm_id: str = Query(..., description="Farm ID to get templates for")):
+    """Get rotation templates scored for a specific farm."""
+    from app.api.routes.data import farm_store, collection_store
+    from app.ml.rotation_optimizer import RotationOptimizer, FarmerPriorities
+
+    if farm_id not in farm_store:
+        raise HTTPException(status_code=404, detail="Farm not found")
+
+    farm = farm_store[farm_id]
+
+    # Find latest collection for this farm
+    farm_collections = [
+        c for c in collection_store.values()
+        if c.farm_id == farm_id
+    ]
+
+    latest_collection = max(farm_collections, key=lambda c: c.collected_at) if farm_collections else None
+
+    # Default priorities - could be customized per farm
+    priorities = FarmerPriorities(
+        water_conservation=0.25,
+        soil_health=0.25,
+        profitability=0.25,
+        pest_management=0.15,
+        climate_resilience=0.10,
+    )
+
+    # Determine climate zone and soil type from collection data
+    climate_zone = "temperate"
+    soil_type = "loam"
+
+    if latest_collection:
+        for name, source in latest_collection.sources.items():
+            if name == "nasa_power" and source.data and "summary" in source.data:
+                # Could infer climate zone from temperature data
+                pass
+            elif name == "crop_casma" and source.data:
+                # Could infer soil type
+                pass
+
+    # Get current crops from farm
+    current_crops = farm.get("crops_of_interest") or ["corn", "soybean"]
+    # Map to crop database keys
+    crop_mapping = {
+        "corn": "corn", "maize": "corn",
+        "soybean": "soybean", "soya": "soybean",
+        "wheat": "wheat",
+        "sorghum": "sorghum",
+        "alfalfa": "alfalfa",
+        "canola": "canola",
+        "pea": "pea",
+        "barley": "barley",
+        "sunflower": "sunflower",
+        "rye": "rye",
+        "radish": "radish",
+        "clover": "clover",
+    }
+    current_crops_mapped = [crop_mapping.get(c.lower(), c.lower()) for c in current_crops]
+    current_crops_mapped = [c for c in current_crops_mapped if c in CROP_DATABASE]
+    if not current_crops_mapped:
+        current_crops_mapped = ["corn", "soybean"]
+
+    # Use rotation optimizer to score templates
+    optimizer = RotationOptimizer(
+        priorities=priorities,
+        climate_zone=climate_zone,
+        soil_type=soil_type,
+        min_rotation_years=3,
+        max_rotation_years=5,
+    )
+
+    templates = []
+    for name, tpl in ROTATION_TEMPLATES.items():
+        # Create a rotation sequence from template
+        sequence = [crop_mapping.get(c.lower(), c.lower()) for c in tpl["sequence"]]
+        sequence = [c for c in sequence if c in CROP_DATABASE]
+
+        if not sequence:
+            continue
+
+        # Score this template
+        from app.ml.rotation_optimizer import RotationSequence, Crop as MLCrop
+        crop_objects = [CROP_DATABASE[c] for c in sequence if c in CROP_DATABASE]
+        if not crop_objects:
+            continue
+
+        rot_seq = RotationSequence(
+            crops=crop_objects,
+            years=len(sequence),
+        )
+
+        # Score the rotation using optimizer's private methods
+        scores = optimizer._score_rotation(rot_seq, current_crops_mapped)
+        rot_seq.scores = scores
+        rot_seq.total_score = optimizer._compute_weighted_score(scores)
+
+        details = optimizer.get_rotation_details(rot_seq)
+
+        templates.append({
+            "name": tpl["name"],
+            "years": len(sequence),
+            "crops": sequence,
+            "benefits": [
+                f"Water conservation score: {details['scores'].get('water_conservation', 0):.1f}",
+                f"Soil health score: {details['scores'].get('soil_health', 0):.1f}",
+                f"Profitability score: {details['scores'].get('profitability', 0):.1f}",
+                f"Pest management score: {details['scores'].get('pest_management', 0):.1f}",
+                f"Climate resilience score: {details['scores'].get('climate_resilience', 0):.1f}",
+            ],
+            "score": int(details["total_score"]),
+            "description": tpl["description"],
+            "constraints": ["Template-based - customize for your specific conditions"],
+        })
+
+    # Sort by score descending
+    templates.sort(key=lambda x: x["score"], reverse=True)
+
+    return {"templates": templates}
 
 
 # ============================================================

@@ -37,7 +37,7 @@ class SMAPService(NASAEarthdataBase):
     DEFAULT_PRODUCT = "SPL3SMP"
 
     def __init__(self, product: str = DEFAULT_PRODUCT):
-        super().__init__(product, version="008")
+        super().__init__(product, version="009")
         self.product = product
         self.variables = DATASET_VARIABLES.get(product, {})
 

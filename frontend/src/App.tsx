@@ -1,6 +1,5 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
+import { useEffect } from 'react'
 import Layout from './components/Layout'
 import Dashboard from './pages/Dashboard'
 import Farms from './pages/Farms'
@@ -14,41 +13,40 @@ import YieldPredictor from './pages/YieldPredictor'
 import WaterStress from './pages/WaterStress'
 import FieldMap from './pages/FieldMap'
 import { AuthProvider } from './stores/authStore'
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 1000 * 60 * 5, // 5 minutes
-      retry: 1,
-      refetchOnWindowFocus: false,
-    },
-  },
-})
+import { useUIStore } from './stores/uiStore'
 
 function App() {
+  const darkMode = useUIStore(state => state.darkMode)
+
+  // Apply dark mode class to document element on mount and when darkMode changes
+  useEffect(() => {
+    if (darkMode) {
+      document.documentElement.classList.add('dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+    }
+  }, [darkMode])
+
   return (
-    <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <Routes>
-          <Route path="/" element={<Layout />}>
-            <Route index element={<Navigate to="/dashboard" replace />} />
-            <Route path="dashboard" element={<Dashboard />} />
-            <Route path="farms" element={<Farms />} />
-            <Route path="monitoring" element={<Monitoring />} />
-            <Route path="crops" element={<Crops />} />
-            <Route path="reports" element={<Reports />} />
-            <Route path="settings" element={<Settings />} />
-            <Route path="soil-health" element={<SoilHealth />} />
-            <Route path="rotation-planner" element={<RotationPlanner />} />
-            <Route path="yield-predictor" element={<YieldPredictor />} />
-            <Route path="water-stress" element={<WaterStress />} />
-            <Route path="field-map" element={<FieldMap />} />
-          </Route>
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
-        </Routes>
-      </AuthProvider>
-      <ReactQueryDevtools initialIsOpen={false} />
-    </QueryClientProvider>
+    <AuthProvider>
+      <Routes>
+        <Route path="/" element={<Layout />}>
+          <Route index element={<Navigate to="/dashboard" replace />} />
+          <Route path="dashboard" element={<Dashboard />} />
+          <Route path="farms" element={<Farms />} />
+          <Route path="monitoring" element={<Monitoring />} />
+          <Route path="crops" element={<Crops />} />
+          <Route path="reports" element={<Reports />} />
+          <Route path="settings" element={<Settings />} />
+          <Route path="soil-health" element={<SoilHealth />} />
+          <Route path="rotation-planner" element={<RotationPlanner />} />
+          <Route path="yield-predictor" element={<YieldPredictor />} />
+          <Route path="water-stress" element={<WaterStress />} />
+          <Route path="field-map" element={<FieldMap />} />
+        </Route>
+        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      </Routes>
+    </AuthProvider>
   )
 }
 

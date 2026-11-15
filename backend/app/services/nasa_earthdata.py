@@ -67,10 +67,26 @@ class NASAEarthdataBase(ABC):
     def auth(self):
         """Lazy authentication."""
         if self._auth is None:
-            self._auth = earthaccess.login(
-                username=self.settings.EARTHDATA_USERNAME,
-                password=self.settings.EARTHDATA_PASSWORD,
-            )
+            if not self.settings.EARTHDATA_USERNAME or not self.settings.EARTHDATA_PASSWORD:
+                raise ValueError(
+                    f"Earthdata credentials not configured. "
+                    f"Set EARTHDATA_USERNAME and EARTHDATA_PASSWORD in .env file. "
+                    f"Register at https://urs.earthdata.nasa.gov/"
+                )
+            try:
+                # earthaccess 0.19+ login() accepts strategy/persist/system only.
+                # Username and password are read from the environment.
+                os.environ["EARTHDATA_USERNAME"] = self.settings.EARTHDATA_USERNAME
+                os.environ["EARTHDATA_PASSWORD"] = self.settings.EARTHDATA_PASSWORD
+
+                self._auth = earthaccess.login(strategy="environment")
+                if not getattr(self._auth, "authenticated", False):
+                    raise ValueError(
+                        "Earthdata login did not authenticate. "
+                        "Check EARTHDATA_USERNAME and EARTHDATA_PASSWORD."
+                    )
+            except Exception as e:
+                raise ValueError(f"Earthdata authentication failed: {e}") from e
         return self._auth
 
     @property
@@ -84,44 +100,91 @@ class NASAEarthdataBase(ABC):
             )
         return self._session
 
-    @retry(
-        wait=wait_exponential(multiplier=1, min=2, max=30),
-        stop=stop_after_attempt(3),
-    )
     async def search_granules(
         self,
         bbox: BoundingBox,
         time_range: TimeRange,
         count: int = 100,
     ) -> List[Dict[str, Any]]:
-        """Search for granules matching criteria."""
-        results = earthaccess.search_data(
-            short_name=self.short_name,
-            version=self.version,
-            bounding_box=bbox.to_earthaccess(),
-            temporal=time_range.to_tuple(),
-            count=count,
-        )
-        return [r.umm for r in results] if results else []
+        """Search for granules matching criteria with retry logic."""
+        import asyncio
+        from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
-    @retry(
-        wait=wait_exponential(multiplier=1, min=2, max=30),
-        stop=stop_after_attempt(3),
-    )
+        @retry(
+            wait=wait_exponential(multiplier=1, min=2, max=30),
+            stop=stop_after_attempt(3),
+            retry=retry_if_exception_type((ConnectionError, TimeoutError, IOError)),
+        )
+        async def _search():
+            # Ensure auth is initialized
+            _ = self.auth
+
+            # Run synchronous earthaccess.search_data in thread pool to avoid blocking
+            loop = asyncio.get_event_loop()
+            def _search():
+                params = {
+                    "short_name": self.short_name,
+                    "bounding_box": bbox.to_earthaccess(),
+                    "temporal": time_range.to_tuple(),
+                    "count": count,
+                }
+                # CMR rejects the literal versions "latest" and "2" for these products.
+                if self.version and self.version not in {"latest", "2"}:
+                    params["version"] = self.version
+                return earthaccess.search_data(**params)
+
+            results = await loop.run_in_executor(None, _search)
+            return list(results or [])
+
+        return await _search()
+
     async def download_granules(
         self,
         granules: List[Dict[str, Any]],
         local_dir: str,
     ) -> List[str]:
-        """Download granules to local directory."""
-        os.makedirs(local_dir, exist_ok=True)
-        results = earthaccess.download(granules, local_dir)
-        return results
+        """Download granules to local directory with retry logic."""
+        import asyncio
+        from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+
+        @retry(
+            wait=wait_exponential(multiplier=1, min=2, max=30),
+            stop=stop_after_attempt(3),
+            retry=retry_if_exception_type((ConnectionError, TimeoutError, IOError)),
+        )
+        async def _download():
+            os.makedirs(local_dir, exist_ok=True)
+
+            # Ensure auth is initialized
+            _ = self.auth
+
+            # Run synchronous earthaccess.download in thread pool
+            loop = asyncio.get_event_loop()
+            results = await loop.run_in_executor(
+                None,
+                lambda: earthaccess.download(granules, local_dir)
+            )
+            return results or []
+
+        return await _download()
 
     async def open_granule(self, granule: Dict[str, Any]) -> xr.Dataset:
         """Open a single granule as xarray Dataset (lazy loading)."""
-        # Use earthaccess.open for cloud-optimized access
-        return earthaccess.open(granule)
+        import asyncio
+
+        # Ensure auth is initialized
+        _ = self.auth
+
+        # Run synchronous earthaccess.open in thread pool
+        loop = asyncio.get_event_loop()
+        try:
+            ds = await loop.run_in_executor(
+                None,
+                lambda: earthaccess.open(granule)
+            )
+            return ds
+        except Exception as e:
+            raise ValueError(f"Failed to open granule: {e}")
 
     @abstractmethod
     async def get_variable(

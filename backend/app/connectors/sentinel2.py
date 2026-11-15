@@ -84,9 +84,12 @@ async def search_sentinel2(
     headers = {"Authorization": f"Bearer {token}"} if token else {}
 
     # Build STAC search request
+    # STAC API expects ISO 8601 datetime with T separator: "2024-01-01T00:00:00Z/2024-01-31T23:59:59Z"
+    start_datetime = start_date.strftime("%Y-%m-%dT00:00:00Z")
+    end_datetime = end_date.strftime("%Y-%m-%dT23:59:59Z")
     search_body = {
         "collections": [COLLECTION],
-        "datetime": f"{start_date.isoformat()}/{end_date.isoformat()}",
+        "datetime": f"{start_datetime}/{end_datetime}",
         "intersects": geometry,
         "query": {
             "eo:cloud_cover": {"lt": max_cloud_cover},

@@ -50,7 +50,7 @@ function Dialog({ open, onOpenChange, children }: DialogProps) {
       />
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
         <div
-          className="relative w-full max-w-lg max-h-[90vh] overflow-hidden rounded-xl bg-white shadow-xl"
+          className="relative w-full max-w-lg max-h-[90vh] overflow-hidden rounded-3xl surface-card shadow-2xl"
           onClick={(e) => e.stopPropagation()}
           role="dialog"
           aria-modal="true"

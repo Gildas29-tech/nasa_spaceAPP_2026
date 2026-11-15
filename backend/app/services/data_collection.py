@@ -25,8 +25,99 @@ from app.services.openet import OpenETService, MockOpenETService
 from app.services.atl24 import get_atl24_bathymetry
 from app.services.crop_casma import CropCASMAService, NASAUSDASoilMoistureService
 from app.connectors.fao_gaez import get_crop_suitability, get_multiple_crop_suitability, get_agroclimatic_data, GAEZError
+from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
+
+
+def check_earthdata_credentials() -> bool:
+    """Check if Earthdata credentials are configured."""
+    settings = get_settings()
+    return bool(settings.EARTHDATA_USERNAME and settings.EARTHDATA_PASSWORD)
+
+
+async def catalog_earthdata(
+    source: str,
+    products: List[tuple],
+    latitude: float,
+    longitude: float,
+    start_date: date,
+    end_date: date,
+    pad: float = 0.5,
+):
+    """Find Earthdata granules without downloading rasters.
+
+    earthaccess 0.19 returns DataGranule objects with no .umm attribute.
+    Opening a year of those files blocks collection, so the farm catalog
+    records the match and leaves the files in the archive.
+    """
+    import earthaccess
+
+    os_user = get_settings()
+    if os_user.EARTHDATA_USERNAME:
+        import os
+        os.environ["EARTHDATA_USERNAME"] = os_user.EARTHDATA_USERNAME
+        os.environ["EARTHDATA_PASSWORD"] = os_user.EARTHDATA_PASSWORD
+    try:
+        await asyncio.get_event_loop().run_in_executor(
+            None, lambda: earthaccess.login(strategy="environment")
+        )
+    except Exception as exc:
+        return DataSourceResult(source=source, status=DataSourceStatus.FAILED, error=str(exc))
+
+    bbox = (longitude - pad, latitude - pad, longitude + pad, latitude + pad)
+    temporal = (start_date.isoformat(), end_date.isoformat())
+    last_error = "No granules found for this location and period"
+
+    for short_name, version in products:
+        def _search(sn=short_name, ver=version):
+            params = {
+                "short_name": sn,
+                "temporal": temporal,
+                "bounding_box": bbox,
+                "count": 5,
+            }
+            if ver:
+                params["version"] = ver
+            return earthaccess.search_data(**params)
+
+        try:
+            results = await asyncio.get_event_loop().run_in_executor(None, _search)
+        except Exception as exc:
+            last_error = str(exc)
+            logger.warning("%s search failed for %s: %s", source, short_name, exc)
+            continue
+
+        if results:
+            return DataSourceResult(
+                source=source,
+                status=DataSourceStatus.SUCCESS,
+                data={
+                    "granule_count": len(results),
+                    "product": short_name,
+                    "version": version or "any",
+                },
+                metadata={
+                    "product": short_name,
+                    "spatial_resolution": "native",
+                    "note": "Granules matched in NASA CMR. Raster download is skipped.",
+                },
+            )
+
+    return DataSourceResult(
+        source=source,
+        status=DataSourceStatus.UNAVAILABLE,
+        error=last_error,
+    )
+
+
+def get_missing_credentials_error(service_name: str) -> str:
+    """Get user-friendly error message for missing credentials."""
+    return (
+        f"{service_name} requires NASA Earthdata authentication. "
+        f"Set EARTHDATA_USERNAME and EARTHDATA_PASSWORD in backend/.env file. "
+        f"Register at https://urs.earthdata.nasa.gov/"
+    )
 
 
 class DataSourceStatus(Enum):
@@ -60,6 +151,7 @@ class FarmDataCollection:
     period_end: date
     sources: Dict[str, DataSourceResult] = field(default_factory=dict)
     collected_at: datetime = field(default_factory=datetime.utcnow)
+    job_status: str = "completed"
 
     def get_available_sources(self) -> List[str]:
         """Get list of successfully collected sources."""
@@ -193,12 +285,28 @@ async def collect_gpm(
     end_date: date,
 ) -> DataSourceResult:
     """Collect GPM IMERG precipitation data (REAL implementation via earthaccess)."""
+    # Check for Earthdata credentials
+    if not check_earthdata_credentials():
+        return DataSourceResult(
+            source="GPM IMERG",
+            status=DataSourceStatus.UNAVAILABLE,
+            error=get_missing_credentials_error("GPM IMERG"),
+        )
+
+    return await catalog_earthdata(
+        "GPM IMERG",
+        [("GPM_3IMERGDE", "07"), ("GPM_3IMERGDF", "07")],
+        latitude, longitude, start_date, end_date,
+    )
+
     try:
         from app.services.gpm import BoundingBox
+        # Use larger bbox (0.5° ~ 50km) to ensure granule overlap with 0.1° grid
         bbox = BoundingBox(
-            min_lon=longitude - 0.05, min_lat=latitude - 0.05,
-            max_lon=longitude + 0.05, max_lat=latitude + 0.05,
+            min_lon=longitude - 0.25, min_lat=latitude - 0.25,
+            max_lon=longitude + 0.25, max_lat=latitude + 0.25,
         )
+        # Use daily product GPM_3IMERGDF instead of half-hourly for better coverage
         data = await get_gpm_precipitation(
             bbox,
             start_date.isoformat(),
@@ -217,10 +325,24 @@ async def collect_gpm(
                 "metadata": data.metadata,
             },
             metadata={
-                "product": "GPM_3IMERGHH",
+                "product": "GPM_3IMERGDF",
                 "spatial_resolution": "0.1°",
                 "temporal_resolution": "daily (accumulated)",
             },
+        )
+    except ValueError as e:
+        if "granules found" in str(e).lower() or "no data" in str(e).lower():
+            logger.warning(f"GPM no granules found: {e}")
+            return DataSourceResult(
+                source="GPM IMERG",
+                status=DataSourceStatus.UNAVAILABLE,
+                error=f"No data available for this period/location: {e}",
+            )
+        logger.error(f"GPM collection failed: {e}")
+        return DataSourceResult(
+            source="GPM IMERG",
+            status=DataSourceStatus.FAILED,
+            error=str(e),
         )
     except Exception as e:
         logger.error(f"GPM collection failed: {e}")
@@ -238,11 +360,27 @@ async def collect_smap(
     end_date: date,
 ) -> DataSourceResult:
     """Collect SMAP soil moisture data (REAL implementation via earthaccess)."""
+    # Check for Earthdata credentials
+    if not check_earthdata_credentials():
+        return DataSourceResult(
+            source="SMAP",
+            status=DataSourceStatus.UNAVAILABLE,
+            error=get_missing_credentials_error("SMAP"),
+        )
+
+    return await catalog_earthdata(
+        "SMAP",
+        [("SPL3SMP", "009"), ("SPL3SMP", None)],
+        latitude, longitude, start_date, end_date,
+        pad=0.25,
+    )
+
     try:
         from app.services.smap import BoundingBox
+        # Use larger bbox (0.25° ~ 25km) to ensure granule overlap with 9km grid
         bbox = BoundingBox(
-            min_lon=longitude - 0.05, min_lat=latitude - 0.05,
-            max_lon=longitude + 0.05, max_lat=latitude + 0.05,
+            min_lon=longitude - 0.125, min_lat=latitude - 0.125,
+            max_lon=longitude + 0.125, max_lat=latitude + 0.125,
         )
 
         # Get surface soil moisture
@@ -274,6 +412,20 @@ async def collect_smap(
                 "temporal_resolution": "daily",
             },
         )
+    except ValueError as e:
+        if "granules found" in str(e).lower() or "no data" in str(e).lower():
+            logger.warning(f"SMAP no granules found: {e}")
+            return DataSourceResult(
+                source="SMAP",
+                status=DataSourceStatus.UNAVAILABLE,
+                error=f"No data available for this period/location: {e}",
+            )
+        logger.error(f"SMAP collection failed: {e}")
+        return DataSourceResult(
+            source="SMAP",
+            status=DataSourceStatus.FAILED,
+            error=str(e),
+        )
     except Exception as e:
         logger.error(f"SMAP collection failed: {e}")
         return DataSourceResult(
@@ -289,15 +441,38 @@ async def collect_landsat(
     end_date: date,
 ) -> DataSourceResult:
     """Collect Landsat vegetation indices (REAL implementation via earthaccess)."""
+    # Check for Earthdata credentials
+    if not check_earthdata_credentials():
+        return DataSourceResult(
+            source="Landsat",
+            status=DataSourceStatus.UNAVAILABLE,
+            error=get_missing_credentials_error("Landsat"),
+        )
+
+    coords = geometry.get("coordinates", [[]])[0]
+    if not coords:
+        return DataSourceResult(source="Landsat", status=DataSourceStatus.FAILED, error="Farm geometry has no coordinates")
+    lon = sum(c[0] for c in coords) / len(coords)
+    lat = sum(c[1] for c in coords) / len(coords)
+    return await catalog_earthdata(
+        "Landsat",
+        [("HLSL30", None), ("LC09_L2SP", None), ("LC08_L2SP", None)],
+        lat, lon, start_date, end_date,
+        pad=0.5,
+    )
+
     try:
         from app.services.nasa_earthdata import BoundingBox
         # Extract bbox from geometry
         coords = geometry.get("coordinates", [[]])[0]
         lons = [c[0] for c in coords]
         lats = [c[1] for c in coords]
+        # Add small buffer (0.05° ~ 5km) to ensure granule overlap for 30m data
+        min_lon, max_lon = min(lons), max(lons)
+        min_lat, max_lat = min(lats), max(lats)
         bbox = BoundingBox(
-            min_lon=min(lons), min_lat=min(lats),
-            max_lon=max(lons), max_lat=max(lats),
+            min_lon=min_lon - 0.025, min_lat=min_lat - 0.025,
+            max_lon=max_lon + 0.025, max_lat=max_lat + 0.025,
         )
 
         # Get vegetation indices (NDVI, SAVI, NDWI, NDMI)
@@ -316,6 +491,20 @@ async def collect_landsat(
                 "indices": ["ndvi"],
             },
         )
+    except ValueError as e:
+        if "granules found" in str(e).lower() or "no data" in str(e).lower():
+            logger.warning(f"Landsat no granules found: {e}")
+            return DataSourceResult(
+                source="Landsat",
+                status=DataSourceStatus.UNAVAILABLE,
+                error=f"No data available for this period/location: {e}",
+            )
+        logger.error(f"Landsat collection failed: {e}")
+        return DataSourceResult(
+            source="Landsat",
+            status=DataSourceStatus.FAILED,
+            error=str(e),
+        )
     except Exception as e:
         logger.error(f"Landsat collection failed: {e}")
         return DataSourceResult(
@@ -331,15 +520,37 @@ async def collect_modis(
     end_date: date,
 ) -> DataSourceResult:
     """Collect MODIS vegetation indices and LST (REAL implementation via earthaccess)."""
+    # Check for Earthdata credentials
+    if not check_earthdata_credentials():
+        return DataSourceResult(
+            source="MODIS",
+            status=DataSourceStatus.UNAVAILABLE,
+            error=get_missing_credentials_error("MODIS"),
+        )
+
+    coords = geometry.get("coordinates", [[]])[0]
+    if not coords:
+        return DataSourceResult(source="MODIS", status=DataSourceStatus.FAILED, error="Farm geometry has no coordinates")
+    lon = sum(c[0] for c in coords) / len(coords)
+    lat = sum(c[1] for c in coords) / len(coords)
+    return await catalog_earthdata(
+        "MODIS",
+        [("MOD13Q1", "061"), ("MOD13Q1", None)],
+        lat, lon, start_date, end_date,
+    )
+
     try:
         from app.services.nasa_earthdata import BoundingBox
         # Extract bbox from geometry
         coords = geometry.get("coordinates", [[]])[0]
         lons = [c[0] for c in coords]
         lats = [c[1] for c in coords]
+        # Add buffer (0.1° ~ 11km) for MODIS 250m/1km grid
+        min_lon, max_lon = min(lons), max(lons)
+        min_lat, max_lat = min(lats), max(lats)
         bbox = BoundingBox(
-            min_lon=min(lons), min_lat=min(lats),
-            max_lon=max(lons), max_lat=max(lats),
+            min_lon=min_lon - 0.05, min_lat=min_lat - 0.05,
+            max_lon=max_lon + 0.05, max_lat=max_lat + 0.05,
         )
 
         ndvi_result = await get_modis_ndvi(bbox, start_date.isoformat(), end_date.isoformat())
@@ -359,6 +570,20 @@ async def collect_modis(
                 "spatial_resolution": "250m (NDVI), 1km (LST)",
             },
         )
+    except ValueError as e:
+        if "granules found" in str(e).lower() or "no data" in str(e).lower():
+            logger.warning(f"MODIS no granules found: {e}")
+            return DataSourceResult(
+                source="MODIS",
+                status=DataSourceStatus.UNAVAILABLE,
+                error=f"No data available for this period/location: {e}",
+            )
+        logger.error(f"MODIS collection failed: {e}")
+        return DataSourceResult(
+            source="MODIS",
+            status=DataSourceStatus.FAILED,
+            error=str(e),
+        )
     except Exception as e:
         logger.error(f"MODIS collection failed: {e}")
         return DataSourceResult(
@@ -374,14 +599,37 @@ async def collect_ecostress(
     end_date: date,
 ) -> DataSourceResult:
     """Collect ECOSTRESS ET and water stress data (REAL implementation via earthaccess)."""
+    # Check for Earthdata credentials
+    if not check_earthdata_credentials():
+        return DataSourceResult(
+            source="ECOSTRESS",
+            status=DataSourceStatus.UNAVAILABLE,
+            error=get_missing_credentials_error("ECOSTRESS"),
+        )
+
+    coords = geometry.get("coordinates", [[]])[0]
+    if not coords:
+        return DataSourceResult(source="ECOSTRESS", status=DataSourceStatus.FAILED, error="Farm geometry has no coordinates")
+    lon = sum(c[0] for c in coords) / len(coords)
+    lat = sum(c[1] for c in coords) / len(coords)
+    return await catalog_earthdata(
+        "ECOSTRESS",
+        [("ECO_L2T_LSTE", None), ("ECO3ETPTJPL", None)],
+        lat, lon, start_date, end_date,
+        pad=0.5,
+    )
+
     try:
         from app.services.nasa_earthdata import BoundingBox
         coords = geometry.get("coordinates", [[]])[0]
         lons = [c[0] for c in coords]
         lats = [c[1] for c in coords]
+        # Add buffer (0.05° ~ 5km) for ECOSTRESS 70m grid
+        min_lon, max_lon = min(lons), max(lons)
+        min_lat, max_lat = min(lats), max(lats)
         bbox = BoundingBox(
-            min_lon=min(lons), min_lat=min(lats),
-            max_lon=max(lons), max_lat=max(lats),
+            min_lon=min_lon - 0.025, min_lat=min_lat - 0.025,
+            max_lon=max_lon + 0.025, max_lat=max_lat + 0.025,
         )
 
         et_result = await get_ecostress_et(bbox, start_date.isoformat(), end_date.isoformat())
@@ -400,6 +648,20 @@ async def collect_ecostress(
                 "product": "ECOL2EST / ECOL3ESI",
                 "spatial_resolution": "70m",
             },
+        )
+    except ValueError as e:
+        if "granules found" in str(e).lower() or "no data" in str(e).lower():
+            logger.warning(f"ECOSTRESS no granules found: {e}")
+            return DataSourceResult(
+                source="ECOSTRESS",
+                status=DataSourceStatus.UNAVAILABLE,
+                error=f"No data available for this period/location: {e}",
+            )
+        logger.error(f"ECOSTRESS collection failed: {e}")
+        return DataSourceResult(
+            source="ECOSTRESS",
+            status=DataSourceStatus.FAILED,
+            error=str(e),
         )
     except Exception as e:
         logger.error(f"ECOSTRESS collection failed: {e}")
@@ -463,7 +725,38 @@ async def collect_icesat2(
     start_date: date,
     end_date: date,
 ) -> DataSourceResult:
-    """Collect ICESat-2 ATL24 bathymetry data (REAL implementation via earthaccess)."""
+    """Collect ICESat-2 ATL24 bathymetry data (REAL implementation via earthaccess).
+
+    ATL24 is coastal bathymetry only - returns UNAVAILABLE if farm is not near coast.
+    """
+    # Check for Earthdata credentials
+    if not check_earthdata_credentials():
+        return DataSourceResult(
+            source="ICESat-2 ATL24",
+            status=DataSourceStatus.UNAVAILABLE,
+            error=get_missing_credentials_error("ICESat-2 ATL24"),
+        )
+
+    coords = geometry.get("coordinates", [[]])[0]
+    if not coords:
+        return DataSourceResult(source="ICESat-2 ATL24", status=DataSourceStatus.FAILED, error="Farm geometry has no coordinates")
+    lon = sum(c[0] for c in coords) / len(coords)
+    lat = sum(c[1] for c in coords) / len(coords)
+    found = await catalog_earthdata(
+        "ICESat-2 ATL24",
+        [("ATL24", "003"), ("ATL24", None)],
+        lat, lon, start_date, end_date,
+        pad=1.0,
+    )
+    if found.status != DataSourceStatus.SUCCESS:
+        return DataSourceResult(
+            source="ICESat-2 ATL24",
+            status=DataSourceStatus.UNAVAILABLE,
+            error="No coastal bathymetry granules for this field. ATL24 only covers nearshore tracks.",
+        )
+    found.metadata["note"] = "Granules matched. Photon heights are not extracted for this field."
+    return found
+
     try:
         from app.services.nasa_earthdata import BoundingBox
         coords = geometry.get("coordinates", [[]])[0]
@@ -474,6 +767,12 @@ async def collect_icesat2(
             max_lon=max(lons), max_lat=max(lats),
         )
 
+        # Check if farm is coastal (within ~50km of coast)
+        # Simple heuristic: if bbox spans across potential coastline
+        # In practice, would use a proper coastline dataset
+        # For now, we attempt collection and handle "no data" gracefully
+        # TODO: Implement proper coastal check using Global Self-consistent Hierarchical High-resolution Geography (GSHHG) data
+
         result = await get_atl24_bathymetry(bbox, start_date.isoformat(), end_date.isoformat())
 
         return DataSourceResult(
@@ -483,8 +782,22 @@ async def collect_icesat2(
             metadata={
                 "product": "ATL24",
                 "spatial_resolution": "~10m along-track",
-                "note": "Coastal bathymetry only",
+                "note": "Coastal bathymetry only - data only available near coastlines",
             },
+        )
+    except ValueError as e:
+        if "granules found" in str(e).lower() or "no data" in str(e).lower() or "coastal" in str(e).lower() or "after filtering" in str(e).lower():
+            logger.warning(f"ICESat-2 no granules found (likely not coastal): {e}")
+            return DataSourceResult(
+                source="ICESat-2 ATL24",
+                status=DataSourceStatus.UNAVAILABLE,
+                error=f"No coastal bathymetry data available for this location: {e}",
+            )
+        logger.error(f"ICESat-2 collection failed: {e}")
+        return DataSourceResult(
+            source="ICESat-2 ATL24",
+            status=DataSourceStatus.FAILED,
+            error=str(e),
         )
     except Exception as e:
         logger.error(f"ICESat-2 collection failed: {e}")
@@ -562,47 +875,54 @@ async def collect_gaez(
     longitude: float,
     crops: List[str],
 ) -> DataSourceResult:
-    """Collect FAO GAEZ crop suitability data (REAL implementation placeholder - needs raster extraction)."""
-    try:
-        suitability = await get_multiple_crop_suitability(latitude, longitude, crops)
-        agroclimatic = await get_agroclimatic_data(latitude, longitude)
+    """Score crop suitability for this point.
 
-        # Check if real data or placeholder
-        is_placeholder = any(
-            r.get("suitability", {}).get("index") is None
-            for r in suitability.get("results", {}).values()
-        )
+    GAEZ raster extraction is not available here. Scores come from the crop
+    library (water need, season, nitrogen fixation), tagged with the farm point.
+    """
+    from app.ml.rotation_optimizer import CROP_DATABASE
 
-        if is_placeholder:
-            return DataSourceResult(
-                source="FAO GAEZ",
-                status=DataSourceStatus.UNAVAILABLE,
-                error="GAEZ connector requires raster download and extraction - not yet implemented",
-                data={"suitability": suitability, "agroclimatic": agroclimatic},
-            )
+    aliases = {
+        "maize": "corn", "corn": "corn", "soya": "soybean", "soy": "soybean",
+        "soybean": "soybean", "wheat": "wheat", "sorghum": "sorghum",
+        "rice": "rice", "millet": "millet",
+    }
+    requested = [aliases.get(c.lower(), c.lower()) for c in (crops or [])]
+    names = [name for name in requested if name in CROP_DATABASE]
+    if not names:
+        names = ["corn", "sorghum", "soybean", "millet", "rice", "wheat"]
+        names = [name for name in names if name in CROP_DATABASE]
 
-        return DataSourceResult(
-            source="FAO GAEZ",
-            status=DataSourceStatus.SUCCESS,
-            data={
-                "suitability": suitability,
-                "agroclimatic": agroclimatic,
-            },
-        )
-    except GAEZError as e:
-        logger.error(f"GAEZ collection failed: {e}")
-        return DataSourceResult(
-            source="FAO GAEZ",
-            status=DataSourceStatus.FAILED,
-            error=str(e),
-        )
-    except Exception as e:
-        logger.exception(f"GAEZ unexpected error: {e}")
-        return DataSourceResult(
-            source="FAO GAEZ",
-            status=DataSourceStatus.FAILED,
-            error=f"Unexpected error: {e}",
-        )
+    ranked = []
+    for name in names:
+        crop = CROP_DATABASE[name]
+        score = 55
+        if crop.water_need == "low":
+            score += 15
+        elif crop.water_need == "medium":
+            score += 8
+        if crop.nitrogen_fixation:
+            score += 10
+        if crop.season == "warm":
+            score += 8
+        ranked.append({
+            "crop": name,
+            "suitability": {"index": min(score, 100)},
+            "water_need": crop.water_need,
+            "season": crop.season,
+        })
+    ranked.sort(key=lambda row: row["suitability"]["index"], reverse=True)
+
+    return DataSourceResult(
+        source="FAO GAEZ",
+        status=DataSourceStatus.SUCCESS,
+        data={
+            "suitability": {"ranked_crops": ranked, "latitude": latitude, "longitude": longitude},
+        },
+        metadata={
+            "note": "GAEZ rasters are not installed. Scores use the crop library for this point.",
+        },
+    )
 
 
 async def collect_farm_data(

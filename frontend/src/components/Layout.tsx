@@ -27,6 +27,7 @@ import {
   Users,
 } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
+import { useUIStore } from '../stores/uiStore'
 
 const navigation = [
   { name: 'Vue d\'ensemble', href: '/dashboard', icon: LayoutDashboard },
@@ -40,21 +41,22 @@ export default function Layout() {
   const location = useLocation()
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  const { user, logout } = useAuthStore()
+  const { user } = useAuthStore()
+  const { darkMode, toggleDarkMode } = useUIStore()
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
-      {/* Sidebar */}
+    <div className="min-h-screen flex">
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-40 bg-white border-r border-gray-200 transition-all duration-300 flex flex-col',
+          'fixed inset-y-0 left-0 z-40 text-white transition-all duration-300 flex flex-col shadow-2xl shadow-black/20',
+          'bg-[#07140f] border-r border-white/10',
           sidebarOpen ? 'w-64' : 'w-20',
           mobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         )}
         aria-label="Main navigation"
       >
         {/* Logo */}
-        <div className={cn('flex items-center justify-between h-16 px-4 border-b border-gray-100', sidebarOpen ? '' : 'justify-center')}>
+        <div className={cn('flex items-center justify-between h-16 px-4 border-b border-white/10', sidebarOpen ? '' : 'justify-center')}>
           <NavLink to="/dashboard" className="flex items-center gap-2" aria-label="Field Shift Home">
             <svg className="w-8 h-8 text-primary-600" viewBox="0 0 100 100" fill="none">
               <circle cx="50" cy="50" r="48" fill="url(#grad)"/>
@@ -71,12 +73,12 @@ export default function Layout() {
               </defs>
             </svg>
             {sidebarOpen && (
-              <span className="font-display font-bold text-xl text-gray-900">Field Shift</span>
+              <span className="font-display font-bold text-xl tracking-tight text-white">Field Shift</span>
             )}
           </NavLink>
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="lg:hidden p-2 rounded-lg hover:bg-gray-100"
+            className="lg:hidden p-2 rounded-lg text-white hover:bg-white/10"
             aria-label="Close sidebar"
           >
             <X className="w-5 h-5" />
@@ -92,16 +94,16 @@ export default function Layout() {
                 key={item.name}
                 to={item.href}
                 className={({ isActive }) => cn(
-                  'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200',
+                  'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200',
                   isActive
-                    ? 'bg-primary-50 text-primary-700'
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100',
+                    ? 'bg-white/12 text-white shadow-inner ring-1 ring-white/15'
+                    : 'text-emerald-100/70 hover:text-white hover:bg-white/8',
                   !sidebarOpen && 'justify-center px-2'
                 )}
                 title={sidebarOpen ? undefined : item.name}
                 aria-current={isActive ? 'page' : undefined}
               >
-                <item.icon className={cn('w-5 h-5 flex-shrink-0', isActive ? 'text-primary-600' : 'text-gray-400')} aria-hidden="true" />
+                <item.icon className={cn('w-5 h-5 flex-shrink-0', isActive ? 'text-emerald-300' : 'text-emerald-100/50')} aria-hidden="true" />
                 {sidebarOpen && <span>{item.name}</span>}
               </NavLink>
             )
@@ -109,14 +111,14 @@ export default function Layout() {
         </nav>
 
         {/* Footer */}
-        <div className={cn('p-4 border-t border-gray-100', !sidebarOpen && 'hidden')}>
-          <div className="flex items-center gap-3 p-3 rounded-lg bg-gray-50">
-            <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center">
-              <Leaf className="w-4 h-4 text-primary-600" />
+        <div className={cn('p-4 border-t border-white/10', !sidebarOpen && 'hidden')}>
+          <div className="flex items-center gap-3 p-3 rounded-2xl bg-white/6 ring-1 ring-white/10">
+            <div className="w-8 h-8 rounded-full bg-emerald-400/15 flex items-center justify-center">
+              <Leaf className="w-4 h-4 text-emerald-300" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-gray-900 truncate">NASA Space Apps 2026</p>
-              <p className="text-xs text-gray-500">Field Shift Challenge</p>
+              <p className="text-sm font-medium text-white truncate">NASA Space Apps 2026</p>
+              <p className="text-xs text-emerald-100/60">Field Shift Challenge</p>
             </div>
           </div>
         </div>
@@ -134,19 +136,19 @@ export default function Layout() {
       {/* Main content */}
       <div className={cn('flex-1 flex flex-col min-w-0 lg:ml-64', sidebarOpen ? 'lg:ml-64' : 'lg:ml-20')}>
         {/* Top bar */}
-        <header className="sticky top-0 z-20 bg-white border-b border-gray-200">
+        <header className="sticky top-0 z-20 border-b border-white/40 bg-white/70 backdrop-blur-xl dark:border-white/10 dark:bg-[#0c1913]/75">
           <div className="flex items-center justify-between h-16 px-4 sm:px-6 lg:px-8">
             <div className="flex items-center gap-4">
               <button
                 onClick={() => setMobileMenuOpen(true)}
-                className="lg:hidden p-2 rounded-lg hover:bg-gray-100"
+                className="lg:hidden p-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/10"
                 aria-label="Open menu"
               >
                 <Menu className="w-6 h-6" />
               </button>
               <button
                 onClick={() => setSidebarOpen(!sidebarOpen)}
-                className="hidden lg:flex p-2 rounded-lg hover:bg-gray-100"
+                className="hidden lg:flex p-2 rounded-lg text-gray-600 hover:bg-black/5 dark:hover:bg-white/10"
                 aria-label={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
               >
                 {sidebarOpen ? <ChevronLeft className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
@@ -158,7 +160,7 @@ export default function Layout() {
                 <input
                   type="search"
                   placeholder="Search fields, crops, data..."
-                  className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-200 bg-gray-50 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent focus:bg-white"
+                  className="w-full pl-10 pr-4 py-2 rounded-full border border-white/70 bg-white/70 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:bg-white"
                   aria-label="Search"
                 />
                 <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" aria-hidden="true" />
@@ -168,21 +170,22 @@ export default function Layout() {
             <div className="flex items-center gap-3">
               {/* Theme toggle */}
               <button
-                className="p-2 rounded-lg hover:bg-gray-100 text-gray-600"
+                onClick={toggleDarkMode}
+                className="p-2 rounded-full hover:bg-black/5 text-gray-600 dark:hover:bg-white/10"
                 aria-label="Toggle dark mode"
               >
-                <Sun className="w-5 h-5" />
+                {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
               </button>
 
               {/* Notifications */}
-              <button className="relative p-2 rounded-lg hover:bg-gray-100 text-gray-600">
+              <button className="relative p-2 rounded-full hover:bg-black/5 text-gray-600 dark:hover:bg-white/10">
                 <Zap className="w-5 h-5" />
                 <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" />
               </button>
 
               {/* User menu */}
               <div className="relative">
-                <button className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-100">
+                <button className="flex items-center gap-2 p-1.5 pr-3 rounded-full hover:bg-black/5 dark:hover:bg-white/10">
                   <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center">
                     <Leaf className="w-4 h-4 text-primary-600" />
                   </div>
@@ -196,8 +199,10 @@ export default function Layout() {
         </header>
 
         {/* Page content */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-auto">
-          <Outlet />
+        <main className="field-veil flex-1 p-4 sm:p-6 lg:p-8 overflow-auto">
+          <div className="page-enter">
+            <Outlet />
+          </div>
         </main>
       </div>
     </div>

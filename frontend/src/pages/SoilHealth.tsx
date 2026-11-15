@@ -15,9 +15,14 @@ import {
   MapPin,
   Calendar,
   AlertTriangle,
+  Gauge,
+  BarChart3,
+  Layers,
+  Database,
 } from 'lucide-react'
-import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '../components/ui/Card'
+import { Card, CardHeader, CardTitle, CardContent, CardFooter, StatCard, MetricCard } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
+import { PageHero } from '../components/PageHero'
 import { Badge } from '../components/ui/Badge'
 import { Input } from '../components/ui/Input'
 import { Select } from '../components/ui/Select'
@@ -25,6 +30,8 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '../components/ui/Tabs'
 import { api } from '../lib/api'
 import { useFarmStore, type Farm } from '../stores/farmStore'
 import { useUIStore } from '../stores/uiStore'
+import { AnimatedPage, RevealOnScroll, StaggeredContainer } from '../components/PageTransition'
+import { Skeleton, CardSkeleton, StatCardSkeleton, ChartSkeleton, TableSkeleton } from '../components/ui/Skeleton'
 
 const soilTextureOptions = [
   { value: 'sand', label: 'Sand' },
@@ -91,6 +98,155 @@ const getGradeColor = (grade: string) => {
   return 'text-red-600 bg-red-100'
 }
 
+// Loading skeleton
+function SoilHealthSkeleton() {
+  return (
+    <AnimatedPage>
+      <div className="space-y-6 animate-fade-in">
+        <PageHero kicker="NASA Earth observations" title="Santé du sol" subtitle="Un score du sol à partir de l'humidité, de la végétation et du climat." />
+
+        <RevealOnScroll transition="slide-up" delay={100}>
+          <CardSkeleton className="animate-stagger-slide-up" />
+        </RevealOnScroll>
+
+        <RevealOnScroll transition="slide-up" delay={200}>
+          <StaggeredContainer staggerDelay={80} transition="stagger-slide-up">
+            <StatCardSkeleton />
+            <StatCardSkeleton />
+            <StatCardSkeleton />
+            <StatCardSkeleton />
+            <StatCardSkeleton />
+            <StatCardSkeleton />
+            <StatCardSkeleton />
+            <StatCardSkeleton />
+          </StaggeredContainer>
+        </RevealOnScroll>
+      </div>
+    </AnimatedPage>
+  )
+}
+
+function ChartCard({ title, subtitle, icon, children, className, delay = 0, ...props }: any) {
+  return (
+    <RevealOnScroll transition="slide-up" delay={delay} key={title}>
+      <Card variant="elevated" className={cn('hover-lift', className)} {...props}>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            {icon && <span className="p-1.5 rounded-lg bg-primary-100 text-primary-600">{icon}</span>}
+            <div>
+              <span>{title}</span>
+              {subtitle && <p className="text-xs text-gray-500 mt-0.5">{subtitle}</p>}
+            </div>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="animate-fade-in" style={{ animationDelay: '100ms' }}>
+          {children}
+        </CardContent>
+      </Card>
+    </RevealOnScroll>
+  )
+}
+
+function FactorCard({ factor, score, percentile, confidence, delay = 0 }: { factor: any; score: number; percentile: number; confidence: number; delay?: number }) {
+  const badgeVariant = score >= 80 ? 'success' : score >= 60 ? 'warning' : 'danger'
+  const statusLabel = score >= 80 ? 'Optimal' : score >= 60 ? 'Needs attention' : 'Critical'
+
+  return (
+    <RevealOnScroll transition="scale-in" delay={delay}>
+      <Card variant="elevated" className="hover-lift">
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className={cn('p-3 rounded-xl', factor.bg)}>
+              <factor.icon className={cn('w-6 h-6', factor.color)} />
+            </div>
+            <div>
+              <h3 className="font-semibold text-gray-900">{factor.label}</h3>
+              <p className="text-sm text-gray-500">{factor.desc}</p>
+            </div>
+          </div>
+          <Badge variant={badgeVariant} className="animate-scale-in">
+            {score}/100
+          </Badge>
+        </CardHeader>
+        <CardContent className="animate-fade-in">
+          <div className="grid grid-cols-2 gap-4 mb-4">
+            <div>
+              <p className="text-sm text-gray-500">Percentile Régional</p>
+              <p className="text-2xl font-bold text-gray-900 animate-count-up">{percentile}th</p>
+            </div>
+            <div>
+              <p className="text-sm text-gray-500">Contribution Confiance</p>
+              <p className="text-2xl font-bold text-gray-900 animate-count-up">{Math.round(score * confidence)}%</p>
+            </div>
+          </div>
+          <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+            <div
+              className="h-full rounded-full transition-all duration-1000 ease-out-cubic"
+              style={{ width: `${score}%`, background: 'linear-gradient(90deg, #ef4444, #f59e0b, #22c55e)' }}
+            />
+          </div>
+          <p className="text-xs text-gray-500 mt-2 text-center animate-fade-in" style={{ animationDelay: '200ms' }}>
+            {statusLabel}
+          </p>
+        </CardContent>
+      </Card>
+    </RevealOnScroll>
+  )
+}
+
+function DataSourceCard({ source, index, usedSources }: { source: any; index: number; usedSources: string[] }) {
+  const isUsed = usedSources.some(s => s.toLowerCase().includes(source.name.toLowerCase()))
+
+  return (
+    <RevealOnScroll transition="slide-up" delay={index * 80}>
+      <Card
+        variant="elevated"
+        className={cn('hover-lift', isUsed && 'border-l-4 border-l-green-500')}
+        hover
+      >
+        <CardContent className="p-6 animate-fade-in">
+          <div className="flex items-start justify-between mb-3">
+            <div>
+              <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                {source.name}
+                <Badge variant={isUsed ? 'success' : 'gray'} size="sm" className="animate-scale-in">
+                  {isUsed ? 'Utilisé' : 'Disponible'}
+                </Badge>
+              </h3>
+              <p className="text-sm text-gray-500">{source.full}</p>
+            </div>
+          </div>
+          <p className="text-xs text-gray-500 mb-3">{source.desc}</p>
+          <div className="flex flex-wrap gap-1">
+            {source.vars.map((v: string) => (
+              <Badge key={v} variant="gray" size="sm" className="animate-scale-in" style={{ animationDelay: `${Math.random() * 100}ms` }}>
+                {v}
+              </Badge>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    </RevealOnScroll>
+  )
+}
+
+function RecommendationCard({ rec, index }: { rec: string; index: number }) {
+  return (
+    <RevealOnScroll transition="slide-up" delay={index * 80}>
+      <Card variant="outlined" className="border-l-4 border-l-primary-500 hover-lift">
+        <CardContent className="pt-6 pb-6 animate-fade-in">
+          <div className="flex items-start gap-3">
+            <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center animate-scale-in">
+              <CheckCircle className="w-5 h-5 text-primary-600" />
+            </div>
+            <p className="text-gray-700 mt-0.5">{rec}</p>
+          </div>
+        </CardContent>
+      </Card>
+    </RevealOnScroll>
+  )
+}
+
 export default function SoilHealth() {
   const { farms, selectedFarmId, selectFarm } = useFarmStore()
   const { addToast } = useUIStore()
@@ -105,9 +261,10 @@ export default function SoilHealth() {
   })
   const [results, setResults] = useState<SoilHealthResult | null>(null)
   const [loading, setLoading] = useState(false)
-  const [activeTab, setActiveTab] = useState('results')
+  const [activeTab, setActiveTab] = useState('overview')
   const [selectedFarm, setSelectedFarm] = useState<Farm | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [showResults, setShowResults] = useState(false)
 
   // Set selected farm when farms change
   useEffect(() => {
@@ -137,14 +294,14 @@ export default function SoilHealth() {
 
   const handleAnalyze = async () => {
     if (!selectedFarm) {
-      addToast({ type: 'warning', title: 'No farm selected', message: 'Please select a farm first' })
+      addToast({ type: 'warning', title: 'Aucune ferme sélectionnée', message: 'Veuillez sélectionner une ferme' })
       return
     }
 
     setLoading(true)
     setError(null)
     try {
-      const data = await api.post<SoilHealthResult>('/api/v1/analysis/soil-health', {
+      const data = await api.post<SoilHealthResult>('/analysis/soil-health', {
         farm_id: selectedFarm.id,
         bbox: formData.bbox,
         start_date: formData.startDate,
@@ -155,368 +312,343 @@ export default function SoilHealth() {
         climate_zone: formData.climateZone,
       })
       setResults(data)
-      setActiveTab('results')
-      addToast({ type: 'success', title: 'Analysis complete', message: 'Soil health assessment finished' })
+      setShowResults(true)
+      setActiveTab('overview')
+      addToast({ type: 'success', title: 'Analyse terminée', message: 'Évaluation de la santé du sol terminée' })
     } catch (err: any) {
       console.error('Soil health analysis failed:', err)
-      setError('Failed to run soil health analysis')
-      addToast({ type: 'error', title: 'Analysis failed', message: 'Please try again' })
+      setError('Échec de l\'analyse de la santé du sol')
+      addToast({ type: 'error', title: 'Analyse échouée', message: 'Veuillez réessayer' })
     } finally {
       setLoading(false)
     }
   }
 
+  if (loading && !results) {
+    return <SoilHealthSkeleton />
+  }
+
   return (
-    <div className="space-y-6">
+    <AnimatedPage className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-display font-bold text-gray-900">Soil Health Analysis</h1>
-          <p className="text-gray-500 mt-1">Comprehensive soil health assessment using NASA Earth observations</p>
-        </div>
-        <Button onClick={handleAnalyze} loading={loading} disabled={!selectedFarm || loading}>
-          <RefreshCw className="w-4 h-4 mr-2" />
-          Run Analysis
-        </Button>
-      </div>
+      <RevealOnScroll transition="slide-up" delay={50}>
+        <PageHero
+          kicker="NASA Earth observations"
+          title="Santé du sol"
+          subtitle="Un score du sol à partir de l'humidité, de la végétation et du climat."
+          actions={
+            <Button
+              onClick={handleAnalyze}
+              loading={loading}
+              disabled={!selectedFarm || loading}
+              className="hover-lift"
+            >
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Lancer l'analyse
+            </Button>
+          }
+        />
+      </RevealOnScroll>
 
       {/* Configuration Form */}
-      <Card className="border-l-4 border-l-primary-500">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <MapPin className="w-5 h-5 text-primary-600" />
-            Analysis Configuration
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {selectedFarm && (
-            <div className="mb-4 p-3 rounded-lg bg-green-50 border border-green-200">
-              <p className="text-sm font-medium text-green-800">Analyzing farm: {selectedFarm.name}</p>
-              <p className="text-xs text-green-700">Location will be auto-filled from farm geometry</p>
+      <RevealOnScroll transition="slide-up" delay={100}>
+        <Card variant="elevated" className="border-l-4 border-l-primary-500 hover-lift">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <MapPin className="w-5 h-5 text-primary-600" />
+              Configuration de l'Analyse
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {selectedFarm && (
+              <div className="mb-4 p-3 rounded-lg bg-green-50 border border-green-200 animate-fade-in">
+                <p className="text-sm font-medium text-green-800">Analyse pour : {selectedFarm.name}</p>
+                <p className="text-xs text-green-700">La localisation sera auto-remplie depuis la géométrie de la ferme</p>
+              </div>
+            )}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <Input
+                label="Longitude Ouest"
+                type="number"
+                step="0.001"
+                value={formData.bbox[0]}
+                onChange={(e) => setFormData({...formData, bbox: [parseFloat(e.target.value), formData.bbox[1], formData.bbox[2], formData.bbox[3]]})}
+                placeholder="-122.5"
+              />
+              <Input
+                label="Latitude Sud"
+                type="number"
+                step="0.001"
+                value={formData.bbox[1]}
+                onChange={(e) => setFormData({...formData, bbox: [formData.bbox[0], parseFloat(e.target.value), formData.bbox[2], formData.bbox[3]]})}
+                placeholder="37.5"
+              />
+              <Input
+                label="Longitude Est"
+                type="number"
+                step="0.001"
+                value={formData.bbox[2]}
+                onChange={(e) => setFormData({...formData, bbox: [formData.bbox[0], formData.bbox[1], parseFloat(e.target.value), formData.bbox[3]]})}
+                placeholder="-121.5"
+              />
+              <Input
+                label="Latitude Nord"
+                type="number"
+                step="0.001"
+                value={formData.bbox[3]}
+                onChange={(e) => setFormData({...formData, bbox: [formData.bbox[0], formData.bbox[1], formData.bbox[2], parseFloat(e.target.value)]})}
+                placeholder="38.5"
+              />
             </div>
-          )}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Input
-              label="West Longitude"
-              type="number"
-              step="0.001"
-              value={formData.bbox[0]}
-              onChange={(e) => setFormData({...formData, bbox: [parseFloat(e.target.value), formData.bbox[1], formData.bbox[2], formData.bbox[3]]})}
-              placeholder="-122.5"
-            />
-            <Input
-              label="South Latitude"
-              type="number"
-              step="0.001"
-              value={formData.bbox[1]}
-              onChange={(e) => setFormData({...formData, bbox: [formData.bbox[0], parseFloat(e.target.value), formData.bbox[2], formData.bbox[3]]})}
-              placeholder="37.5"
-            />
-            <Input
-              label="East Longitude"
-              type="number"
-              step="0.001"
-              value={formData.bbox[2]}
-              onChange={(e) => setFormData({...formData, bbox: [formData.bbox[0], formData.bbox[1], parseFloat(e.target.value), formData.bbox[3]]})}
-              placeholder="-121.5"
-            />
-            <Input
-              label="North Latitude"
-              type="number"
-              step="0.001"
-              value={formData.bbox[3]}
-              onChange={(e) => setFormData({...formData, bbox: [formData.bbox[0], formData.bbox[1], formData.bbox[2], parseFloat(e.target.value)]})}
-              placeholder="38.5"
-            />
-          </div>
-          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Input
-              label="Start Date"
-              type="date"
-              value={formData.startDate}
-              onChange={(e) => setFormData({...formData, startDate: e.target.value})}
-            />
-            <Input
-              label="End Date"
-              type="date"
-              value={formData.endDate}
-              onChange={(e) => setFormData({...formData, endDate: e.target.value})}
-            />
-            <Select
-              label="Soil Texture"
-              value={formData.soilTexture}
-              onChange={(e) => setFormData({...formData, soilTexture: e.target.value})}
-              options={soilTextureOptions}
-            />
-            <Input
-              label="Soil pH"
-              type="number"
-              step="0.1"
-              min="3"
-              max="9"
-              value={formData.soilPh}
-              onChange={(e) => setFormData({...formData, soilPh: parseFloat(e.target.value)})}
-              placeholder="6.5"
-            />
-          </div>
-          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Input
-              label="Organic Matter (%)"
-              type="number"
-              step="0.1"
-              value={formData.organicMatter}
-              onChange={(e) => setFormData({...formData, organicMatter: e.target.value})}
-              placeholder="Optional - leave blank to estimate"
-            />
-            <Select
-              label="Climate Zone"
-              value={formData.climateZone}
-              onChange={(e) => setFormData({...formData, climateZone: e.target.value})}
-              options={climateZoneOptions}
-            />
-          </div>
-          <div className="mt-4 flex gap-2">
-            <Button onClick={handleAnalyze} loading={loading} className="flex-1" disabled={!selectedFarm || loading}>
-              <RefreshCw className="w-4 h-4 mr-2" />
-              Analyze Soil Health
-            </Button>
-            <Button variant="secondary" onClick={() => {}}>Save Configuration</Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {error && (
-        <Card className="border-red-200 bg-red-50">
-          <CardContent className="p-4 flex items-center gap-3 text-red-700">
-            <AlertTriangle className="w-5 h-5" />
-            <span>{error}</span>
-            <Button variant="ghost" size="sm" onClick={handleAnalyze} className="ml-auto">
-              <RefreshCw className="w-4 h-4 mr-1" />
-              Réessayer
-            </Button>
+            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <Input
+                label="Date de début"
+                type="date"
+                value={formData.startDate}
+                onChange={(e) => setFormData({...formData, startDate: e.target.value})}
+              />
+              <Input
+                label="Date de fin"
+                type="date"
+                value={formData.endDate}
+                onChange={(e) => setFormData({...formData, endDate: e.target.value})}
+              />
+              <Select
+                label="Texture du Sol"
+                value={formData.soilTexture}
+                onChange={(e) => setFormData({...formData, soilTexture: e.target.value})}
+                options={soilTextureOptions}
+              />
+              <Input
+                label="pH du Sol"
+                type="number"
+                step="0.1"
+                min="3"
+                max="9"
+                value={formData.soilPh}
+                onChange={(e) => setFormData({...formData, soilPh: parseFloat(e.target.value)})}
+                placeholder="6.5"
+              />
+            </div>
+            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Input
+                label="Matière Organique (%)"
+                type="number"
+                step="0.1"
+                value={formData.organicMatter}
+                onChange={(e) => setFormData({...formData, organicMatter: e.target.value})}
+                placeholder="Optionnel - laisser vide pour estimation"
+              />
+              <Select
+                label="Zone Climatique"
+                value={formData.climateZone}
+                onChange={(e) => setFormData({...formData, climateZone: e.target.value})}
+                options={climateZoneOptions}
+              />
+            </div>
+            <div className="mt-4 flex gap-2">
+              <Button onClick={handleAnalyze} loading={loading} className="flex-1 hover-lift" disabled={!selectedFarm || loading}>
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Analyser la Santé du Sol
+              </Button>
+              <Button variant="secondary" onClick={() => {}} className="hover-lift">Sauvegarder la Configuration</Button>
+            </div>
           </CardContent>
         </Card>
+      </RevealOnScroll>
+
+      {error && (
+        <RevealOnScroll transition="shake" delay={150}>
+          <Card variant="outlined" className="border-red-200 bg-red-50 animate-shake">
+            <CardContent className="p-4 flex items-center gap-3 text-red-700">
+              <AlertTriangle className="w-5 h-5" />
+              <span>{error}</span>
+              <Button variant="ghost" size="sm" onClick={handleAnalyze} className="ml-auto hover-lift">
+                <RefreshCw className="w-4 h-4 mr-1" />
+                Réessayer
+              </Button>
+            </CardContent>
+          </Card>
+        </RevealOnScroll>
       )}
 
       {results && (
         <>
           {/* Results Tabs */}
-          <Tabs defaultValue="results" onChange={setActiveTab}>
-            <TabsList>
-              <TabsTrigger value="overview">Overview</TabsTrigger>
-              <TabsTrigger value="factors">Factor Details</TabsTrigger>
-              <TabsTrigger value="recommendations">Recommendations</TabsTrigger>
-              <TabsTrigger value="data">Data Sources</TabsTrigger>
-            </TabsList>
+          <RevealOnScroll transition="slide-up" delay={showResults ? 200 : 1000}>
+            <Tabs defaultValue="overview" onChange={setActiveTab} className="w-full" animated transition="fade">
+              <TabsList className="grid w-full grid-cols-4">
+                <TabsTrigger value="overview" icon={<Gauge className="w-4 h-4" />}>Vue d'ensemble</TabsTrigger>
+                <TabsTrigger value="factors" icon={<BarChart3 className="w-4 h-4" />}>Détails Facteurs</TabsTrigger>
+                <TabsTrigger value="recommendations" icon={<Layers className="w-4 h-4" />}>Recommandations</TabsTrigger>
+                <TabsTrigger value="data" icon={<Database className="w-4 h-4" />}>Sources de Données</TabsTrigger>
+              </TabsList>
 
-            <TabsContent value="overview">
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Score Card */}
-                <Card className="lg:col-span-1">
-                  <CardHeader>
-                    <CardTitle>Overall Score</CardTitle>
-                  </CardHeader>
-                  <CardContent className="text-center py-8">
-                    <div className="relative inline-block mb-6">
-                      <svg className="w-40 h-40 transform -rotate-90">
-                        <circle
-                          cx="100"
-                          cy="100"
-                          r="90"
-                          fill="none"
-                          stroke="#e5e7eb"
-                          strokeWidth="12"
-                        />
-                        <circle
-                          cx="100"
-                          cy="100"
-                          r="90"
-                          fill="none"
-                          stroke="url(#gradient)"
-                          strokeWidth="12"
-                          strokeLinecap="round"
-                          strokeDasharray={`${results.overall_score / 100 * 565.48} 565.48`}
-                          style={{ strokeDashoffset: 0 }}
-                        />
-                        <defs>
-                          <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                            <stop offset="0%" stopColor="#ef4444" />
-                            <stop offset="30%" stopColor="#f59e0b" />
-                            <stop offset="60%" stopColor="#eab308" />
-                            <stop offset="100%" stopColor="#22c55e" />
-                          </linearGradient>
-                        </defs>
-                      </svg>
-                      <div className="absolute inset-0 flex flex-col items-center justify-center">
-                        <span className="text-5xl font-bold text-gray-900">{results.overall_score}</span>
-                        <Badge className={cn('mt-2', getGradeColor(results.grade))}>
-                          Grade {results.grade}
-                        </Badge>
+              {/* Overview Tab */}
+              <TabsContent value="overview" transition="fade">
+                <StaggeredContainer staggerDelay={100} transition="stagger-slide-up" className="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  {/* Score Card */}
+                  <ChartCard
+                    title="Score Global"
+                    icon={<Gauge className="w-5 h-5" />}
+                    delay={0}
+                  >
+                    <CardContent className="text-center py-8 animate-fade-in">
+                      <div className="relative inline-block mb-6">
+                        <svg className="w-40 h-40 transform -rotate-90">
+                          <circle
+                            cx="100"
+                            cy="100"
+                            r="90"
+                            fill="none"
+                            stroke="#e5e7eb"
+                            strokeWidth="12"
+                          />
+                          <circle
+                            cx="100"
+                            cy="100"
+                            r="90"
+                            fill="none"
+                            stroke="url(#gradient)"
+                            strokeWidth="12"
+                            strokeLinecap="round"
+                            strokeDasharray={`${results.overall_score / 100 * 565.48} 565.48`}
+                            style={{ strokeDashoffset: 0 }}
+                            className="animate-gauge-fill"
+                          />
+                          <defs>
+                            <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                              <stop offset="0%" stopColor="#ef4444" />
+                              <stop offset="30%" stopColor="#f59e0b" />
+                              <stop offset="60%" stopColor="#eab308" />
+                              <stop offset="100%" stopColor="#22c55e" />
+                            </linearGradient>
+                          </defs>
+                        </svg>
+                        <div className="absolute inset-0 flex flex-col items-center justify-center">
+                          <span className="text-5xl font-bold text-gray-900 animate-count-up">{results.overall_score}</span>
+                          <Badge className={cn('mt-2', getGradeColor(results.grade))}>
+                            Grade {results.grade}
+                          </Badge>
+                        </div>
                       </div>
-                    </div>
-                    <div className="space-y-2 text-sm">
-                      <p className="text-gray-500">Confidence: {Math.round(results.confidence * 100)}%</p>
-                      <p className="text-gray-500">Percentile: {results.percentiles.overall}th</p>
-                      <p className="text-gray-500">Assessed: {results.assessment_date}</p>
-                    </div>
-                  </CardContent>
-                  <CardFooter className="flex gap-2">
-                    <Button variant="secondary" size="sm" className="flex-1">
-                      <Download className="w-4 h-4 mr-2" />
-                      Export
-                    </Button>
-                    <Button variant="ghost" size="sm" className="flex-1" onClick={handleAnalyze}>
-                      <RefreshCw className="w-4 h-4 mr-2" />
-                      Re-run
-                    </Button>
-                  </CardFooter>
-                </Card>
+                      <div className="space-y-2 text-sm animate-slide-up">
+                        <p className="text-gray-500">Confiance: {Math.round(results.confidence * 100)}%</p>
+                        <p className="text-gray-500">Percentile: {results.percentiles.overall}th</p>
+                        <p className="text-gray-500">Évalué: {results.assessment_date}</p>
+                      </div>
+                    </CardContent>
+                    <CardFooter className="flex gap-2">
+                      <Button variant="secondary" size="sm" className="flex-1 hover-lift">
+                        <Download className="w-4 h-4 mr-2" />
+                        Exporter
+                      </Button>
+                      <Button variant="ghost" size="sm" className="flex-1 hover-lift" onClick={handleAnalyze}>
+                        <RefreshCw className="w-4 h-4 mr-2" />
+                        Relancer
+                      </Button>
+                    </CardFooter>
+                  </ChartCard>
 
-                {/* Factor Scores */}
-                <Card className="lg:col-span-2">
-                  <CardHeader>
-                    <CardTitle>Factor Scores</CardTitle>
-                  </CardHeader>
-                  <CardContent>
+                  {/* Factor Scores */}
+                  <ChartCard
+                    title="Scores par Facteur"
+                    icon={<BarChart3 className="w-5 h-5" />}
+                    className="lg:col-span-2"
+                    delay={100}
+                  >
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      {factorDetails.map((factor) => {
+                      {factorDetails.map((factor, i) => {
                         const score = results.factors[factor.key as keyof typeof results.factors]
                         return (
-                          <div key={factor.key} className="p-4 rounded-xl bg-gray-50">
-                            <div className="flex items-center gap-2 mb-2">
-                              <div className={cn('p-2 rounded-lg', factor.bg)}>
-                                <factor.icon className={cn('w-5 h-5', factor.color)} />
+                          <RevealOnScroll key={factor.key} transition="scale-in" delay={i * 50}>
+                            <div className="p-4 rounded-xl bg-gray-50 animate-fade-in hover-lift">
+                              <div className="flex items-center gap-2 mb-2">
+                                <div className={cn('p-2 rounded-lg', factor.bg)}>
+                                  <factor.icon className={cn('w-5 h-5', factor.color)} />
+                                </div>
+                                <span className="font-medium text-gray-900 text-sm">{factor.label}</span>
                               </div>
-                              <span className="font-medium text-gray-900 text-sm">{factor.label}</span>
+                              <div className="flex items-end justify-between">
+                                <span className="text-3xl font-bold text-gray-900 animate-count-up">{score}</span>
+                                <Badge variant={score >= 80 ? 'success' : score >= 60 ? 'warning' : 'danger'} size="sm" className="animate-scale-in">
+                                  {score >= 80 ? 'Bon' : score >= 60 ? 'Moyen' : 'Faible'}
+                                </Badge>
+                              </div>
+                              <div className="mt-2 h-2 bg-gray-200 rounded-full overflow-hidden">
+                                <div
+                                  className="h-full rounded-full transition-all duration-1000 ease-out-cubic"
+                                  style={{ width: `${score}%`, background: 'linear-gradient(90deg, #ef4444, #f59e0b, #22c55e)' }}
+                                />
+                              </div>
+                              <p className="text-xs text-gray-500 mt-1">{factor.desc}</p>
                             </div>
-                            <div className="flex items-end justify-between">
-                              <span className="text-3xl font-bold text-gray-900">{score}</span>
-                              <Badge variant={score >= 80 ? 'success' : score >= 60 ? 'warning' : 'danger'} size="sm">
-                                {score >= 80 ? 'Good' : score >= 60 ? 'Fair' : 'Poor'}
-                              </Badge>
-                            </div>
-                            <div className="mt-2 h-2 bg-gray-200 rounded-full overflow-hidden">
-                              <div
-                                className="h-full rounded-full transition-all"
-                                style={{ width: `${score}%`, background: `linear-gradient(90deg, #ef4444, #f59e0b, #22c55e)` }}
-                              />
-                            </div>
-                            <p className="text-xs text-gray-500 mt-1">{factor.desc}</p>
-                          </div>
+                          </RevealOnScroll>
                         )
                       })}
                     </div>
-                  </CardContent>
-                </Card>
-              </div>
-            </TabsContent>
+                  </ChartCard>
+                </StaggeredContainer>
+              </TabsContent>
 
-            <TabsContent value="factors">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {factorDetails.map((factor) => {
-                  const score = results.factors[factor.key as keyof typeof results.factors]
-                  const percentile = results.percentiles[factor.key.replace('_score', '') as keyof typeof results.percentiles] || 50
-                  return (
-                    <Card key={factor.key}>
-                      <CardHeader className="flex flex-row items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className={cn('p-3 rounded-xl', factor.bg)}>
-                            <factor.icon className={cn('w-6 h-6', factor.color)} />
-                          </div>
-                          <div>
-                            <h3 className="font-semibold text-gray-900">{factor.label}</h3>
-                            <p className="text-sm text-gray-500">{factor.desc}</p>
-                          </div>
-                        </div>
-                        <Badge variant={score >= 80 ? 'success' : score >= 60 ? 'warning' : 'danger'}>
-                          {score}/100
-                        </Badge>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="grid grid-cols-2 gap-4 mb-4">
-                          <div>
-                            <p className="text-sm text-gray-500">Regional Percentile</p>
-                            <p className="text-2xl font-bold text-gray-900">{percentile}th</p>
-                          </div>
-                          <div>
-                            <p className="text-sm text-gray-500">Confidence Contribution</p>
-                            <p className="text-2xl font-bold text-gray-900">{Math.round(score * results.confidence)}%</p>
-                          </div>
-                        </div>
-                        <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                          <div
-                            className="h-full rounded-full transition-all"
-                            style={{ width: `${score}%`, background: `linear-gradient(90deg, #ef4444, #f59e0b, #22c55e)` }}
-                          />
-                        </div>
-                        <p className="text-xs text-gray-500 mt-2 text-center">
-                          {score >= 80 ? '✅ Optimal' : score >= 60 ? '⚠️ Needs Attention' : '🔴 Critical'}
-                        </p>
-                      </CardContent>
-                    </Card>
-                  )
-                })}
-              </div>
-            </TabsContent>
+              {/* Factors Tab */}
+              <TabsContent value="factors" transition="fade">
+                <RevealOnScroll transition="slide-up" delay={100}>
+                  <StaggeredContainer staggerDelay={80} transition="stagger-slide-up" className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {factorDetails.map((factor, i) => {
+                      const score = results.factors[factor.key as keyof typeof results.factors]
+                      const percentile = results.percentiles[factor.key.replace('_score', '') as keyof typeof results.percentiles] || 50
+                      return (
+                        <FactorCard
+                          key={factor.key}
+                          factor={factor}
+                          score={score}
+                          percentile={percentile}
+                          confidence={results.confidence}
+                          delay={i * 50}
+                        />
+                      )
+                    })}
+                  </StaggeredContainer>
+                </RevealOnScroll>
+              </TabsContent>
 
-            <TabsContent value="recommendations">
-              <div className="space-y-4">
-                <h2 className="text-lg font-semibold text-gray-900">Actionable Recommendations</h2>
-                {results.recommendations.map((rec, i) => (
-                  <Card key={i} className="border-l-4 border-l-primary-500">
-                    <CardContent className="pt-6 pb-6">
-                      <div className="flex items-start gap-3">
-                        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center">
-                          <CheckCircle className="w-5 h-5 text-primary-600" />
-                        </div>
-                        <p className="text-gray-700 mt-0.5">{rec}</p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            </TabsContent>
+              {/* Recommendations Tab */}
+              <TabsContent value="recommendations" transition="fade">
+                <RevealOnScroll transition="slide-up" delay={100}>
+                  <div className="mt-6 space-y-4 animate-fade-in">
+                    <h2 className="text-lg font-semibold text-gray-900">Recommandations Actionnables</h2>
+                    {results.recommendations.map((rec, i) => (
+                      <RecommendationCard key={i} rec={rec} index={i} />
+                    ))}
+                  </div>
+                </RevealOnScroll>
+              </TabsContent>
 
-            <TabsContent value="data">
-              <div className="space-y-4">
-                <h2 className="text-lg font-semibold text-gray-900">Data Sources Used</h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {[
-                    { name: 'SMAP', full: 'Soil Moisture Active Passive', status: results.data_sources.includes('SMAP') ? 'Used' : 'Available', vars: ['Surface Soil Moisture', 'Root Zone Soil Moisture'], desc: 'NASA JPL • 9km daily • Global' },
-                    { name: 'MODIS', full: 'Moderate Resolution Imaging Spectroradiometer', status: results.data_sources.includes('MODIS') ? 'Used' : 'Available', vars: ['NDVI', 'EVI', 'LST'], desc: 'NASA Terra/Aqua • 250m-1km • 16-day/8-day' },
-                    { name: 'Landsat 8/9', full: 'Landsat Collection 2 Level-2', status: results.data_sources.includes('Landsat') ? 'Used' : 'Available', vars: ['Surface Reflectance', 'NDVI', 'SAVI'], desc: 'USGS/NASA • 30m • 16-day' },
-                    { name: 'GPM/IMERG', full: 'Global Precipitation Measurement', status: results.data_sources.includes('GPM') ? 'Used' : 'Available', vars: ['Precipitation Rate', 'Accumulation'], desc: 'NASA/JAXA • 0.1° • 30-min' },
-                    { name: 'ECOSTRESS', full: 'ECOsystem Spaceborne Thermal Radiometer', status: results.data_sources.includes('ECOSTRESS') ? 'Used' : 'Available', vars: ['ET', 'Water Stress Index', 'ESI'], desc: 'NASA JPL • 70m • ~4-day revisit' },
-                    { name: 'OpenET', full: 'Open Evapotranspiration', status: results.data_sources.includes('OpenET') ? 'Used' : 'Available', vars: ['Field-scale ET', 'ET Reference'], desc: 'NASA/USGS/DRI • 30m • Monthly' },
-                  ].map((source, i) => (
-                    <Card key={i} className={source.status === 'Used' ? 'border-l-4 border-l-green-500' : ''}>
-                      <CardContent className="p-6">
-                        <div className="flex items-start justify-between mb-3">
-                          <div>
-                            <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-                              {source.name}
-                              <Badge variant={source.status === 'Used' ? 'success' : 'gray'} size="sm">
-                                {source.status}
-                              </Badge>
-                            </h3>
-                            <p className="text-sm text-gray-500">{source.full}</p>
-                          </div>
-                        </div>
-                        <p className="text-xs text-gray-500 mb-3">{source.desc}</p>
-                        <div className="flex flex-wrap gap-1">
-                          {source.vars.map((v) => (
-                            <Badge key={v} variant="gray" size="sm">{v}</Badge>
-                          ))}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              </div>
-            </TabsContent>
-          </Tabs>
+              {/* Data Sources Tab */}
+              <TabsContent value="data" transition="fade">
+                <RevealOnScroll transition="slide-up" delay={100}>
+                  <div className="mt-6 space-y-4 animate-fade-in">
+                    <h2 className="text-lg font-semibold text-gray-900">Sources de Données Utilisées</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {[
+                        { name: 'SMAP', full: 'Soil Moisture Active Passive', vars: ['Surface Soil Moisture', 'Root Zone Soil Moisture'], desc: 'NASA JPL • 9km daily • Global' },
+                        { name: 'MODIS', full: 'Moderate Resolution Imaging Spectroradiometer', vars: ['NDVI', 'EVI', 'LST'], desc: 'NASA Terra/Aqua • 250m-1km • 16-day/8-day' },
+                        { name: 'Landsat 8/9', full: 'Landsat Collection 2 Level-2', vars: ['Surface Reflectance', 'NDVI', 'SAVI'], desc: 'USGS/NASA • 30m • 16-day' },
+                        { name: 'GPM/IMERG', full: 'Global Precipitation Measurement', vars: ['Precipitation Rate', 'Accumulation'], desc: 'NASA/JAXA • 0.1° • 30-min' },
+                        { name: 'ECOSTRESS', full: 'ECOsystem Spaceborne Thermal Radiometer', vars: ['ET', 'Water Stress Index', 'ESI'], desc: 'NASA JPL • 70m • ~4-day revisit' },
+                        { name: 'OpenET', full: 'Open Evapotranspiration', vars: ['Field-scale ET', 'ET Reference'], desc: 'NASA/USGS/DRI • 30m • Monthly' },
+                      ].map((source, i) => (
+                        <DataSourceCard key={i} source={source} index={i} usedSources={results.data_sources} />
+                      ))}
+                    </div>
+                  </div>
+                </RevealOnScroll>
+              </TabsContent>
+            </Tabs>
+          </RevealOnScroll>
         </>
       )}
-    </div>
+    </AnimatedPage>
   )
 }
