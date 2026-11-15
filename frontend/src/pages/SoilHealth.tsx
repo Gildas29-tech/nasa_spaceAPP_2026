@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { cn } from '../lib/utils'
 import {
   Leaf,
@@ -14,6 +14,7 @@ import {
   RefreshCw,
   MapPin,
   Calendar,
+  AlertTriangle,
 } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
@@ -21,6 +22,9 @@ import { Badge } from '../components/ui/Badge'
 import { Input } from '../components/ui/Input'
 import { Select } from '../components/ui/Select'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../components/ui/Tabs'
+import { api } from '../lib/api'
+import { useFarmStore, type Farm } from '../stores/farmStore'
+import { useUIStore } from '../stores/uiStore'
 
 const soilTextureOptions = [
   { value: 'sand', label: 'Sand' },
@@ -40,35 +44,32 @@ const climateZoneOptions = [
   { value: 'cold', label: 'Cold' },
 ]
 
-const mockSoilHealthResult = {
-  overall_score: 78,
-  grade: 'B+',
+interface SoilHealthResult {
+  overall_score: number
+  grade: string
   factors: {
-    moisture_score: 65,
-    organic_matter_score: 72,
-    vegetation_score: 85,
-    temperature_score: 78,
-    erosion_risk_score: 82,
-    compaction_score: 70,
-    ph_score: 75,
-    nutrient_score: 74,
-  },
+    moisture_score: number
+    organic_matter_score: number
+    vegetation_score: number
+    temperature_score: number
+    erosion_risk_score: number
+    compaction_score: number
+    ph_score: number
+    nutrient_score: number
+  }
   percentiles: {
-    overall: 65,
-    moisture: 45,
-    organic_matter: 60,
-    vegetation: 80,
-    temperature: 70,
-    erosion_risk: 75,
-  },
-  recommendations: [
-    '💧 Soil moisture is suboptimal. Consider irrigation scheduling based on SMAP data, or explore drought-tolerant crop varieties.',
-    '🌱 Low organic matter detected. Recommend cover cropping, reduced tillage, and compost/manure application to build soil carbon.',
-    '⚠️ Potential compaction issues. Consider deep ripping, controlled traffic farming, and avoiding field operations when wet.',
-  ],
-  confidence: 0.82,
-  location: [37.7749, -122.4194],
-  assessment_date: '2024-01-15',
+    overall: number
+    moisture: number
+    organic_matter: number
+    vegetation: number
+    temperature: number
+    erosion_risk: number
+  }
+  recommendations: string[]
+  confidence: number
+  location: [number, number]
+  assessment_date: string
+  data_sources: string[]
 }
 
 const factorDetails = [
@@ -82,7 +83,17 @@ const factorDetails = [
   { key: 'nutrient_score', label: 'Nutrient Cycling', icon: CheckCircle, color: 'text-cyan-600', bg: 'bg-cyan-100', desc: 'Organic matter & vegetation productivity' },
 ]
 
+const getGradeColor = (grade: string) => {
+  if (grade.startsWith('A')) return 'text-green-600 bg-green-100'
+  if (grade.startsWith('B')) return 'text-blue-600 bg-blue-100'
+  if (grade.startsWith('C')) return 'text-yellow-600 bg-yellow-100'
+  if (grade.startsWith('D')) return 'text-orange-600 bg-orange-100'
+  return 'text-red-600 bg-red-100'
+}
+
 export default function SoilHealth() {
+  const { farms, selectedFarmId, selectFarm } = useFarmStore()
+  const { addToast } = useUIStore()
   const [formData, setFormData] = useState({
     bbox: [-122.5, 37.5, -121.5, 38.5],
     startDate: '2024-01-01',
@@ -92,25 +103,67 @@ export default function SoilHealth() {
     organicMatter: '',
     climateZone: 'temperate',
   })
-  const [results, setResults] = useState<typeof mockSoilHealthResult | null>(mockSoilHealthResult)
+  const [results, setResults] = useState<SoilHealthResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [activeTab, setActiveTab] = useState('results')
+  const [selectedFarm, setSelectedFarm] = useState<Farm | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  // Set selected farm when farms change
+  useEffect(() => {
+    if (farms.length > 0) {
+      const farm = farms.find(f => f.id === selectedFarmId) || farms[0]
+      setSelectedFarm(farm)
+      selectFarm(farm.id)
+      // Update form with farm location if available
+      if (farm.geometry && farm.geometry.type === 'Polygon' && farm.geometry.coordinates[0].length > 0) {
+        const coords = farm.geometry.coordinates[0]
+        const lons = coords.map(c => c[0])
+        const lats = coords.map(c => c[1])
+        const minLon = Math.min(...lons)
+        const maxLon = Math.max(...lons)
+        const minLat = Math.min(...lats)
+        const maxLat = Math.max(...lats)
+        setFormData(prev => ({
+          ...prev,
+          bbox: [minLon - 0.01, minLat - 0.01, maxLon + 0.01, maxLat + 0.01]
+        }))
+      }
+    } else {
+      setSelectedFarm(null)
+      selectFarm(null)
+    }
+  }, [farms, selectedFarmId, selectFarm])
 
   const handleAnalyze = async () => {
-    setLoading(true)
-    // Simulate API call
-    await new Promise(r => setTimeout(r, 1500))
-    setLoading(false)
-    setResults(mockSoilHealthResult)
-    setActiveTab('results')
-  }
+    if (!selectedFarm) {
+      addToast({ type: 'warning', title: 'No farm selected', message: 'Please select a farm first' })
+      return
+    }
 
-  const getGradeColor = (grade: string) => {
-    if (grade.startsWith('A')) return 'text-green-600 bg-green-100'
-    if (grade.startsWith('B')) return 'text-blue-600 bg-blue-100'
-    if (grade.startsWith('C')) return 'text-yellow-600 bg-yellow-100'
-    if (grade.startsWith('D')) return 'text-orange-600 bg-orange-100'
-    return 'text-red-600 bg-red-100'
+    setLoading(true)
+    setError(null)
+    try {
+      const data = await api.post<SoilHealthResult>('/api/v1/analysis/soil-health', {
+        farm_id: selectedFarm.id,
+        bbox: formData.bbox,
+        start_date: formData.startDate,
+        end_date: formData.endDate,
+        soil_texture: formData.soilTexture,
+        soil_ph: formData.soilPh,
+        organic_matter: formData.organicMatter ? parseFloat(formData.organicMatter) : undefined,
+        climate_zone: formData.climateZone,
+      })
+      setResults(data)
+      setActiveTab('results')
+      addToast({ type: 'success', title: 'Analysis complete', message: 'Soil health assessment finished' })
+    } catch (err: any) {
+      console.error('Soil health analysis failed:', err)
+      setError('Failed to run soil health analysis')
+      addToast({ type: 'error', title: 'Analysis failed', message: 'Please try again' })
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -121,7 +174,7 @@ export default function SoilHealth() {
           <h1 className="text-2xl font-display font-bold text-gray-900">Soil Health Analysis</h1>
           <p className="text-gray-500 mt-1">Comprehensive soil health assessment using NASA Earth observations</p>
         </div>
-        <Button onClick={handleAnalyze} loading={loading}>
+        <Button onClick={handleAnalyze} loading={loading} disabled={!selectedFarm || loading}>
           <RefreshCw className="w-4 h-4 mr-2" />
           Run Analysis
         </Button>
@@ -136,6 +189,12 @@ export default function SoilHealth() {
           </CardTitle>
         </CardHeader>
         <CardContent>
+          {selectedFarm && (
+            <div className="mb-4 p-3 rounded-lg bg-green-50 border border-green-200">
+              <p className="text-sm font-medium text-green-800">Analyzing farm: {selectedFarm.name}</p>
+              <p className="text-xs text-green-700">Location will be auto-filled from farm geometry</p>
+            </div>
+          )}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <Input
               label="West Longitude"
@@ -217,7 +276,7 @@ export default function SoilHealth() {
             />
           </div>
           <div className="mt-4 flex gap-2">
-            <Button onClick={handleAnalyze} loading={loading} className="flex-1">
+            <Button onClick={handleAnalyze} loading={loading} className="flex-1" disabled={!selectedFarm || loading}>
               <RefreshCw className="w-4 h-4 mr-2" />
               Analyze Soil Health
             </Button>
@@ -225,6 +284,19 @@ export default function SoilHealth() {
           </div>
         </CardContent>
       </Card>
+
+      {error && (
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="p-4 flex items-center gap-3 text-red-700">
+            <AlertTriangle className="w-5 h-5" />
+            <span>{error}</span>
+            <Button variant="ghost" size="sm" onClick={handleAnalyze} className="ml-auto">
+              <RefreshCw className="w-4 h-4 mr-1" />
+              Réessayer
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {results && (
         <>
@@ -293,7 +365,7 @@ export default function SoilHealth() {
                       <Download className="w-4 h-4 mr-2" />
                       Export
                     </Button>
-                    <Button variant="ghost" size="sm" className="flex-1">
+                    <Button variant="ghost" size="sm" className="flex-1" onClick={handleAnalyze}>
                       <RefreshCw className="w-4 h-4 mr-2" />
                       Re-run
                     </Button>
@@ -368,7 +440,7 @@ export default function SoilHealth() {
                           </div>
                           <div>
                             <p className="text-sm text-gray-500">Confidence Contribution</p>
-                            <p className="text-2xl font-bold text-gray-900">{Math.round(score * 0.82)}%</p>
+                            <p className="text-2xl font-bold text-gray-900">{Math.round(score * results.confidence)}%</p>
                           </div>
                         </div>
                         <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
@@ -410,12 +482,12 @@ export default function SoilHealth() {
                 <h2 className="text-lg font-semibold text-gray-900">Data Sources Used</h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {[
-                    { name: 'SMAP', full: 'Soil Moisture Active Passive', status: 'Used', vars: ['Surface Soil Moisture', 'Root Zone Soil Moisture'], desc: 'NASA JPL • 9km daily • Global' },
-                    { name: 'MODIS', full: 'Moderate Resolution Imaging Spectroradiometer', status: 'Used', vars: ['NDVI', 'EVI', 'LST'], desc: 'NASA Terra/Aqua • 250m-1km • 16-day/8-day' },
-                    { name: 'Landsat 8/9', full: 'Landsat Collection 2 Level-2', status: 'Used', vars: ['Surface Reflectance', 'NDVI', 'SAVI'], desc: 'USGS/NASA • 30m • 16-day' },
-                    { name: 'GPM/IMERG', full: 'Global Precipitation Measurement', status: 'Used', vars: ['Precipitation Rate', 'Accumulation'], desc: 'NASA/JAXA • 0.1° • 30-min' },
-                    { name: 'ECOSTRESS', full: 'ECOsystem Spaceborne Thermal Radiometer', status: 'Available', vars: ['ET', 'Water Stress Index', 'ESI'], desc: 'NASA JPL • 70m • ~4-day revisit' },
-                    { name: 'OpenET', full: 'Open Evapotranspiration', status: 'Available', vars: ['Field-scale ET', 'ET Reference'], desc: 'NASA/USGS/DRI • 30m • Monthly' },
+                    { name: 'SMAP', full: 'Soil Moisture Active Passive', status: results.data_sources.includes('SMAP') ? 'Used' : 'Available', vars: ['Surface Soil Moisture', 'Root Zone Soil Moisture'], desc: 'NASA JPL • 9km daily • Global' },
+                    { name: 'MODIS', full: 'Moderate Resolution Imaging Spectroradiometer', status: results.data_sources.includes('MODIS') ? 'Used' : 'Available', vars: ['NDVI', 'EVI', 'LST'], desc: 'NASA Terra/Aqua • 250m-1km • 16-day/8-day' },
+                    { name: 'Landsat 8/9', full: 'Landsat Collection 2 Level-2', status: results.data_sources.includes('Landsat') ? 'Used' : 'Available', vars: ['Surface Reflectance', 'NDVI', 'SAVI'], desc: 'USGS/NASA • 30m • 16-day' },
+                    { name: 'GPM/IMERG', full: 'Global Precipitation Measurement', status: results.data_sources.includes('GPM') ? 'Used' : 'Available', vars: ['Precipitation Rate', 'Accumulation'], desc: 'NASA/JAXA • 0.1° • 30-min' },
+                    { name: 'ECOSTRESS', full: 'ECOsystem Spaceborne Thermal Radiometer', status: results.data_sources.includes('ECOSTRESS') ? 'Used' : 'Available', vars: ['ET', 'Water Stress Index', 'ESI'], desc: 'NASA JPL • 70m • ~4-day revisit' },
+                    { name: 'OpenET', full: 'Open Evapotranspiration', status: results.data_sources.includes('OpenET') ? 'Used' : 'Available', vars: ['Field-scale ET', 'ET Reference'], desc: 'NASA/USGS/DRI • 30m • Monthly' },
                   ].map((source, i) => (
                     <Card key={i} className={source.status === 'Used' ? 'border-l-4 border-l-green-500' : ''}>
                       <CardContent className="p-6">

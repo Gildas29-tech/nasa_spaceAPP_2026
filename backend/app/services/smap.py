@@ -10,6 +10,7 @@ from app.core.config import get_settings
 from app.services.nasa_earthdata import (
     BoundingBox,
     NASADataResult,
+    NASAEarthdataBase,
     NASAEarthdataService,
     TimeRange,
     DATASET_VARIABLES,

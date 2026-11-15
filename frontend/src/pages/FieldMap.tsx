@@ -1,4 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
+import maplibregl, { Map, MapMouseEvent, LngLatLike, Marker, Popup } from 'maplibre-gl'
+import 'maplibre-gl/dist/maplibre-gl.css'
 import { cn } from '../lib/utils'
 import {
   MapPin,
@@ -16,22 +19,69 @@ import {
   Wind,
   BarChart3,
   X,
+  Search,
+  Target,
+  RefreshCw,
+  Loader2,
+  AlertCircle,
+  CheckCircle,
+  Map as MapIcon,
+  Navigation,
+  GitBranch,
+  ArrowRight,
+  Save,
+  Globe,
+  MapPin as MapPinIcon,
+  FileCheck,
 } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
 import { Badge } from '../components/ui/Badge'
 import { Select } from '../components/ui/Select'
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '../components/ui/Tabs'
 import { Input } from '../components/ui/Input'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '../components/ui/Tabs'
+import { useCreateFarmWithStore, useTriggerCollection, type Farm } from '../hooks/useDataCollection'
+import type { CreateFarmData } from '../stores/farmStore'
+import { useToast } from '../hooks/useToast.tsx'
+import { useFarmStore } from '../stores/farmStore'
+import { api } from '../lib/api'
 
-// Mock field data
-const mockFields = [
-  { id: 1, name: 'North Field 1', crop: 'Corn', area: 45, coords: [-122.45, 37.78], health: 82, bbox: [-122.47, 37.76, -122.43, 37.80] },
-  { id: 2, name: 'South Field 3', crop: 'Soybean', area: 32, coords: [-122.42, 37.75], health: 78, bbox: [-122.44, 37.73, -122.40, 37.77] },
-  { id: 3, name: 'East Field 2', crop: 'Wheat', area: 28, coords: [-122.38, 37.79], health: 85, bbox: [-122.40, 37.77, -122.36, 37.81] },
-  { id: 4, name: 'West Field 1', crop: 'Corn', area: 52, coords: [-122.48, 37.77], health: 72, bbox: [-122.50, 37.75, -122.46, 37.79] },
-  { id: 5, name: 'Central Field 4', crop: 'Alfalfa', area: 18, coords: [-122.44, 37.77], health: 90, bbox: [-122.45, 37.76, -122.43, 37.78] },
-]
+// Mapbox/MapLibre style URLs - using free demo styles from MapLibre
+const BASE_MAP_STYLES = {
+  // Free demo styles (no API key required)
+  'osm-bright': 'https://demotiles.maplibre.org/style.json',
+  'osm-liberty': 'https://demotiles.maplibre.org/style.json',
+  'osm-dark': 'https://demotiles.maplibre.org/style.json',
+  // Alternative free styles
+  'openstreetmap': 'https://tiles.openstreetmap.org/styles/osm-bright.json',
+  'stamen-terrain': 'https://stamen-tiles.a.ssl.fastly.net/terrain/style.json',
+  'stamen-toner': 'https://stamen-tiles.a.ssl.fastly.net/toner/style.json',
+}
+
+// NASA tile layer sources (examples - would need real tile services)
+const NASA_TILE_SOURCES = {
+  modis_ndvi: {
+    name: 'MODIS NDVI',
+    tiles: ['https://tiles.example.com/modis/ndvi/{z}/{x}/{y}.pbf'],
+    type: 'vector',
+    minzoom: 0,
+    maxzoom: 12,
+  },
+  sentinel2: {
+    name: 'Sentinel-2',
+    tiles: ['https://tiles.example.com/sentinel2/{z}/{x}/{y}.pbf'],
+    type: 'vector',
+    minzoom: 0,
+    maxzoom: 14,
+  },
+  smap: {
+    name: 'SMAP Soil Moisture',
+    tiles: ['https://tiles.example.com/smap/{z}/{x}/{y}.pbf'],
+    type: 'vector',
+    minzoom: 0,
+    maxzoom: 10,
+  },
+}
 
 const layerOptions = [
   // Soil Moisture
@@ -59,45 +109,529 @@ const layerOptions = [
 ]
 
 const baseMaps = [
-  { id: 'satellite', label: 'Satellite', icon: '🛰️' },
-  { id: 'terrain', label: 'Terrain', icon: '🏔️' },
-  { id: 'streets', label: 'Streets', icon: '🗺️' },
-  { id: 'hybrid', label: 'Hybrid', icon: '🌐' },
+  { id: 'osm-bright', label: 'OSM Bright', icon: '🗺️' },
+  { id: 'osm-liberty', label: 'OSM Liberty', icon: '🗺️' },
+  { id: 'osm-dark', label: 'OSM Dark', icon: '🌙' },
+  { id: 'stamen-terrain', label: 'Terrain', icon: '🏔️' },
+  { id: 'stamen-toner', label: 'Toner', icon: '📋' },
 ]
+
+interface Coordinates {
+  lng: number
+  lat: number
+}
+
+interface GeoLocation {
+  lat: number
+  lng: number
+  address?: string | null
+  displayName?: string
+  country?: string
+  region?: string
+  state?: string
+  county?: string
+}
+
+interface StructuredAddress {
+  country: string
+  countryCode: string
+  state: string
+  region: string
+  county: string
+  city: string
+  postcode: string
+  displayName: string
+}
 
 export default function FieldMap() {
   const mapContainerRef = useRef<HTMLDivElement>(null)
-  const [selectedField, setSelectedField] = useState<typeof mockFields[0] | null>(mockFields[0])
-  const [baseMap, setBaseMap] = useState('satellite')
+  const mapRef = useRef<Map | null>(null)
+  const markerRef = useRef<Marker | null>(null)
+  const popupRef = useRef<Popup | null>(null)
+
+  const [selectedLocation, setSelectedLocation] = useState<GeoLocation | null>(null)
+  const [baseMap, setBaseMap] = useState('osm-bright')
   const [activeLayerGroup, setActiveLayerGroup] = useState('Vegetation')
   const [visibleLayers, setVisibleLayers] = useState<Record<string, boolean>>(
     Object.fromEntries(layerOptions.map(l => [l.id, l.visible]))
   )
-  const [mapView, setMapView] = useState({ center: [-122.44, 37.77], zoom: 11 })
+  const [mapView, setMapView] = useState({ center: { lng: -122.44, lat: 37.77 }, zoom: 11 })
   const [drawingMode, setDrawingMode] = useState(false)
   const [activeTab, setActiveTab] = useState('layers')
   const [dateRange, setDateRange] = useState({ start: '2024-01-01', end: '2024-12-31' })
   const [opacity, setOpacity] = useState(70)
+  const [isGeocoding, setIsGeocoding] = useState(false)
+  const [mapLoaded, setMapLoaded] = useState(false)
+  const [mapError, setMapError] = useState<string | null>(null)
+  // Farm creation form state
+  const [showFarmForm, setShowFarmForm] = useState(false)
+  const [farmFormData, setFarmFormData] = useState<Partial<CreateFarmData>>({
+    name: '',
+    crop: 'Maize',
+    area: '1 ha',
+    soilType: '',
+    description: '',
+  })
+  const [soilType, setSoilType] = useState<string>('')
+  const [isDeterminingSoil, setIsDeterminingSoil] = useState(false)
+  const [isSavingFarm, setIsSavingFarm] = useState(false)
 
-  // Initialize map (placeholder for MapLibre GL)
+  const navigate = useNavigate()
+  const { toast } = useToast()
+  const createFarmWithStore = useCreateFarmWithStore()
+  const triggerCollection = useTriggerCollection()
+  const createFarmStore = useFarmStore(state => state.createFarm)
+  const [selectedFarmId, setSelectedFarmId] = useState<string | null>(null)
+
+  // Initialize MapLibre GL map
   useEffect(() => {
-    // In real app: initialize MapLibre GL map here
-    // const map = new maplibregl.Map({ container: mapContainerRef.current, ... })
-    console.log('Map initialized')
+    if (!mapContainerRef.current || mapRef.current) return
+
+    try {
+      const map = new maplibregl.Map({
+        container: mapContainerRef.current,
+        style: BASE_MAP_STYLES[baseMap as keyof typeof BASE_MAP_STYLES] || BASE_MAP_STYLES['osm-bright'],
+        center: [mapView.center.lng, mapView.center.lat] as LngLatLike,
+        zoom: mapView.zoom,
+        attributionControl: { compact: true },
+      })
+
+      map.addControl(new maplibregl.NavigationControl(), 'top-right')
+      map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-left')
+      map.addControl(new maplibregl.FullscreenControl(), 'top-right')
+
+      map.on('load', () => {
+        setMapLoaded(true)
+        // Add click handler for location selection
+        map.on('click', handleMapClick)
+      })
+
+      map.on('error', (e) => {
+        console.error('Map error:', e)
+        setMapError(e.error?.message || 'Map failed to load')
+      })
+
+      mapRef.current = map
+
+      return () => {
+        map.off('click', handleMapClick)
+        map.remove()
+        mapRef.current = null
+      }
+    } catch (error) {
+      console.error('Failed to initialize map:', error)
+      setMapError(error instanceof Error ? error.message : 'Failed to initialize map')
+    }
   }, [])
+
+  // Update map style when base map changes
+  useEffect(() => {
+    if (mapRef.current && mapLoaded) {
+      mapRef.current.setStyle(BASE_MAP_STYLES[baseMap as keyof typeof BASE_MAP_STYLES] || BASE_MAP_STYLES['osm-bright'])
+    }
+  }, [baseMap, mapLoaded])
+
+  // Handle map click - get coordinates and reverse geocode
+  const handleMapClick = useCallback(async (e: MapMouseEvent) => {
+    const coords = e.lngLat
+    const location: Coordinates = { lng: coords.lng, lat: coords.lat }
+
+    // Update map view
+    setMapView({ center: location, zoom: mapRef.current?.getZoom() || 13 })
+
+    // Reverse geocode
+    setIsGeocoding(true)
+    try {
+      const structuredAddress = await reverseGeocode(coords.lat, coords.lng)
+      let geoLocation: GeoLocation
+      let displayName: string
+
+      if (structuredAddress) {
+        geoLocation = {
+          lat: coords.lat,
+          lng: coords.lng,
+          address: structuredAddress.displayName,
+          displayName: structuredAddress.displayName,
+          country: structuredAddress.country,
+          region: structuredAddress.region || structuredAddress.state,
+          state: structuredAddress.state,
+          county: structuredAddress.county,
+        }
+        displayName = structuredAddress.displayName
+      } else {
+        const fallbackName = `${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}`
+        geoLocation = {
+          lat: coords.lat,
+          lng: coords.lng,
+          displayName: fallbackName,
+        }
+        displayName = fallbackName
+      }
+
+      setSelectedLocation(geoLocation)
+
+      // Auto-determine soil type
+      setIsDeterminingSoil(true)
+      const determinedSoilType = await determineSoilType(coords.lat, coords.lng)
+      setSoilType(determinedSoilType)
+      setIsDeterminingSoil(false)
+
+      // Pre-fill farm form with auto-determined values
+      setFarmFormData(prev => ({
+        ...prev,
+        name: `Field at ${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}`,
+        soilType: determinedSoilType,
+        description: `${determinedSoilType} | ${structuredAddress?.country || 'Unknown country'}, ${structuredAddress?.state || structuredAddress?.region || 'Unknown region'}`,
+      }))
+
+      // Show the farm creation form
+      setShowFarmForm(true)
+
+      // Update marker
+      updateMarker(location, displayName || 'Selected Location')
+
+      toast({
+        title: 'Location Selected',
+        description: displayName,
+        variant: 'success',
+      })
+    } catch (error) {
+      console.error('Geocoding failed:', error)
+      const fallbackName = `${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}`
+      const geoLocation: GeoLocation = {
+        lat: coords.lat,
+        lng: coords.lng,
+        displayName: fallbackName,
+      }
+      setSelectedLocation(geoLocation)
+      updateMarker(location, fallbackName)
+      setShowFarmForm(true)
+    } finally {
+      setIsGeocoding(false)
+      setIsDeterminingSoil(false)
+    }
+  }, [toast])
+
+  // Update marker on map
+  const updateMarker = useCallback((location: Coordinates, label: string) => {
+    if (!mapRef.current) return
+
+    if (markerRef.current) {
+      markerRef.current.remove()
+    }
+
+    const el = document.createElement('div')
+    el.className = 'w-6 h-6 bg-primary-600 rounded-full border-2 border-white shadow-lg flex items-center justify-center'
+    el.innerHTML = '<div class="w-2 h-2 bg-white rounded-full"></div>'
+
+    markerRef.current = new maplibregl.Marker({ element: el })
+      .setLngLat([location.lng, location.lat])
+      .addTo(mapRef.current)
+
+    if (popupRef.current) {
+      popupRef.current.remove()
+    }
+
+    popupRef.current = new maplibregl.Popup({ offset: 25, closeButton: false })
+      .setLngLat([location.lng, location.lat])
+      .setHTML(`
+        <div class="p-2 min-w-[200px]">
+          <p class="font-medium text-gray-900">${label}</p>
+          <p class="text-sm text-gray-500 font-mono">${location.lat.toFixed(6)}, ${location.lng.toFixed(6)}</p>
+        </div>
+      `)
+      .addTo(mapRef.current)
+  }, [])
+
+  // Enhanced reverse geocode using Nominatim (OpenStreetMap) - returns structured address
+  const reverseGeocode = async (lat: number, lng: number): Promise<StructuredAddress | null> => {
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
+        { headers: { 'Accept': 'application/json', 'User-Agent': 'FieldShift/1.0' } }
+      )
+      if (!response.ok) return null
+      const data = await response.json()
+
+      const address = data.address || {}
+      return {
+        country: address.country || '',
+        countryCode: address.country_code?.toUpperCase() || '',
+        state: address.state || address.region || '',
+        region: address.state_district || address.county || address.region || '',
+        county: address.county || '',
+        city: address.city || address.town || address.village || address.municipality || '',
+        postcode: address.postcode || '',
+        displayName: data.display_name || `${lat.toFixed(4)}, ${lng.toFixed(4)}`,
+      }
+    } catch {
+      return null
+    }
+  }
+
+  // Determine soil type based on location using NASA-USDA or simple lookup
+  const determineSoilType = async (lat: number, lng: number): Promise<string> => {
+    try {
+      // Try to get soil type from NASA-USDA global soil moisture data
+      // For now, use a simple classification based on latitude/climate zones
+      // In production, this would call the NASA-USDA API or a soil database
+
+      // Simple climate-based soil classification
+      const absLat = Math.abs(lat)
+
+      if (absLat < 23.5) {
+        // Tropical zone
+        return 'Tropical soil (Oxisol/Ultisol) - High weathering, low fertility'
+      } else if (absLat < 35) {
+        // Subtropical zone
+        return 'Subtropical soil (Alfisol) - Moderate weathering, good fertility'
+      } else if (absLat < 50) {
+        // Temperate zone
+        return 'Temperate soil (Mollisol/Alfisol) - High organic matter, very fertile'
+      } else if (absLat < 66.5) {
+        // Boreal zone
+        return 'Boreal soil (Spodosol/Histosol) - Acidic, high organic matter'
+      } else {
+        // Polar zone
+        return 'Polar soil (Gelisol) - Permafrost, low decomposition'
+      }
+    } catch {
+      return 'Unknown - requires soil survey'
+    }
+  }
+
+  // Save farm without triggering data collection
+  const handleSaveFarm = async () => {
+    if (!selectedLocation) {
+      toast({ title: 'No Location', description: 'Please select a location on the map first', variant: 'warning' })
+      return
+    }
+
+    // Validate required fields
+    if (!farmFormData.name?.trim()) {
+      toast({ title: 'Missing Name', description: 'Please enter a farm name', variant: 'warning' })
+      return
+    }
+
+    setIsSavingFarm(true)
+    try {
+      // Create a small square polygon (~100m x 100m) around the clicked point
+      const offset = 0.001 // ~100m at this latitude
+      const farmData: CreateFarmData = {
+        name: farmFormData.name,
+        crop: farmFormData.crop || 'Maize',
+        area: farmFormData.area || '1 ha',
+        location: selectedLocation.address || selectedLocation.displayName || `${selectedLocation.lat.toFixed(4)}, ${selectedLocation.lng.toFixed(4)}`,
+        soilType: farmFormData.soilType || soilType,
+        description: farmFormData.description,
+        geometry: {
+          type: 'Polygon' as const,
+          coordinates: [[
+            [selectedLocation.lng - offset, selectedLocation.lat + offset],
+            [selectedLocation.lng + offset, selectedLocation.lat + offset],
+            [selectedLocation.lng + offset, selectedLocation.lat - offset],
+            [selectedLocation.lng - offset, selectedLocation.lat - offset],
+            [selectedLocation.lng - offset, selectedLocation.lat + offset],
+          ]] as [number, number][][],
+        },
+        centroid: { lat: selectedLocation.lat, lon: selectedLocation.lng },
+      }
+
+      // Create farm using the store (which syncs with backend)
+      const newFarm = await createFarmWithStore.mutateAsync(farmData)
+
+      if (!newFarm) {
+        throw new Error('Failed to create farm')
+      }
+
+      setSelectedFarmId(newFarm.id)
+
+      toast({
+        title: 'Farm Saved Successfully',
+        description: `Farm "${newFarm.name}" created and added to your farms list.`,
+        variant: 'success',
+      })
+
+      // Close the form and clear selection
+      setShowFarmForm(false)
+      setSelectedLocation(null)
+
+      // Reset form
+      setFarmFormData({
+        name: '',
+        crop: 'Maize',
+        area: '1 ha',
+        soilType: '',
+        description: '',
+      })
+      setSoilType('')
+
+      // Auto-navigate to Farms page to show the new farm
+      setTimeout(() => {
+        navigate('/farms')
+      }, 1500)
+
+    } catch (error) {
+      toast({
+        title: 'Failed to Save Farm',
+        description: error instanceof Error ? error.message : 'Failed to create farm',
+        variant: 'danger',
+      })
+    } finally {
+      setIsSavingFarm(false)
+    }
+  }
+
+  // Search for location (forward geocoding)
+  const searchLocation = async (query: string) => {
+    setIsGeocoding(true)
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1&addressdetails=1`,
+        { headers: { 'Accept': 'application/json', 'User-Agent': 'FieldShift/1.0' } }
+      )
+      if (!response.ok) throw new Error('Search failed')
+      const data = await response.json()
+      if (data.length > 0) {
+        const result = data[0]
+        const location: Coordinates = { lng: parseFloat(result.lon), lat: parseFloat(result.lat) }
+        const geoLocation: GeoLocation = {
+          lat: location.lat,
+          lng: location.lng,
+          address: result.display_name,
+          displayName: result.display_name,
+        }
+        setSelectedLocation(geoLocation)
+        setMapView({ center: location, zoom: 13 })
+        mapRef.current?.flyTo({ center: [location.lng, location.lat], zoom: 13 })
+        updateMarker(location, result.display_name)
+        toast({ title: 'Location Found', description: result.display_name, variant: 'success' })
+      } else {
+        toast({ title: 'Not Found', description: 'No location found for your query', variant: 'warning' })
+      }
+    } catch (error) {
+      toast({ title: 'Search Failed', description: 'Could not search for location', variant: 'danger' })
+    } finally {
+      setIsGeocoding(false)
+    }
+  }
+
+  // Use current location
+  const useCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      toast({ title: 'Not Supported', description: 'Geolocation is not supported by your browser', variant: 'danger' })
+      return
+    }
+
+    setIsGeocoding(true)
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const location: Coordinates = { lng: position.coords.longitude, lat: position.coords.latitude }
+        setMapView({ center: location, zoom: 13 })
+        mapRef.current?.flyTo({ center: [location.lng, location.lat], zoom: 13 })
+        reverseGeocode(location.lat, location.lng).then(structuredAddress => {
+          const displayName = structuredAddress?.displayName || 'Current Location'
+          const geoLocation: GeoLocation = {
+            lat: location.lat,
+            lng: location.lng,
+            address: structuredAddress?.displayName,
+            displayName,
+            country: structuredAddress?.country,
+            state: structuredAddress?.state,
+            region: structuredAddress?.region,
+            county: structuredAddress?.county,
+          }
+          setSelectedLocation(geoLocation)
+          updateMarker(location, displayName)
+          toast({ title: 'Location Found', description: displayName, variant: 'success' })
+        })
+      },
+      (error) => {
+        toast({ title: 'Location Error', description: error.message, variant: 'danger' })
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    )
+    setIsGeocoding(false)
+  }
+
+  // Trigger data collection for selected location - creates farm then starts collection
+  const handleCollectData = async () => {
+    if (!selectedLocation) {
+      toast({ title: 'No Location', description: 'Please select a location on the map first', variant: 'warning' })
+      return
+    }
+
+    try {
+      // Create a small square polygon (~100m x 100m) around the clicked point
+      const offset = 0.001 // ~100m at this latitude
+      const farmData = {
+        name: `Field at ${selectedLocation.lat.toFixed(4)}, ${selectedLocation.lng.toFixed(4)}`,
+        crop: 'Maize', // default crop
+        area: '1 ha',
+        location: selectedLocation.address || selectedLocation.displayName || `${selectedLocation.lat.toFixed(4)}, ${selectedLocation.lng.toFixed(4)}`,
+        geometry: {
+          type: 'Polygon' as const,
+          coordinates: [[
+            [selectedLocation.lng - offset, selectedLocation.lat + offset],
+            [selectedLocation.lng + offset, selectedLocation.lat + offset],
+            [selectedLocation.lng + offset, selectedLocation.lat - offset],
+            [selectedLocation.lng - offset, selectedLocation.lat - offset],
+            [selectedLocation.lng - offset, selectedLocation.lat + offset],
+          ]] as [number, number][][],
+        },
+        centroid: { lat: selectedLocation.lat, lon: selectedLocation.lng },
+      }
+
+      // Create farm using the store (which syncs with backend)
+      const newFarm = await createFarmWithStore.mutateAsync(farmData)
+
+      if (!newFarm) {
+        throw new Error('Failed to create farm')
+      }
+
+      setSelectedFarmId(newFarm.id)
+
+      // Now trigger data collection with the real farm ID
+      const result = await triggerCollection.mutateAsync({
+        farm_id: newFarm.id,
+        start_date: dateRange.start,
+        end_date: dateRange.end,
+        crops_of_interest: ['maize', 'wheat', 'soybean'],
+      })
+
+      const collectionId = result.collection_id
+
+      toast({
+        title: 'Farm Created & Collection Started',
+        description: `Farm "${newFarm.name}" created. Collection ${collectionId.slice(0, 8)}... triggered.`,
+        variant: 'success',
+      })
+
+      // Auto-navigate to Farms page to show the new farm
+      setTimeout(() => {
+        navigate('/farms')
+      }, 1500)
+
+      // Optionally clear selection after starting collection
+      setSelectedLocation(null)
+    } catch (error) {
+      toast({
+        title: 'Failed',
+        description: error instanceof Error ? error.message : 'Failed to create farm or start collection',
+        variant: 'danger',
+      })
+    }
+  }
 
   const toggleLayer = (layerId: string) => {
     setVisibleLayers(prev => ({ ...prev, [layerId]: !prev[layerId] }))
+    // In real app: toggle map layers here
+    // mapRef.current?.setLayoutProperty(layerId, 'visibility', visible ? 'visible' : 'none')
   }
 
   const getGroupLayers = (group: string) => layerOptions.filter(l => l.group === group)
 
   const getVisibleCount = () => Object.values(visibleLayers).filter(v => v).length
-
-  const handleFieldClick = (field: typeof mockFields[0]) => {
-    setSelectedField(field)
-    setMapView({ center: field.coords, zoom: 13 })
-  }
 
   return (
     <div className="h-[calc(100vh-8rem)] flex overflow-hidden">
@@ -114,10 +648,43 @@ export default function FieldMap() {
           <Badge variant="info" className="text-xs">{getVisibleCount()} active</Badge>
         </div>
 
+        {/* Search & Location Tools */}
+        <div className="p-4 border-b border-gray-100 space-y-3">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <Input
+              type="text"
+              placeholder="Search location..."
+              onKeyDown={(e) => e.key === 'Enter' && searchLocation(e.currentTarget.value)}
+              className="pl-10"
+              disabled={isGeocoding}
+            />
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              className="flex-1"
+              onClick={useCurrentLocation}
+              disabled={isGeocoding}
+            >
+              <Target className="w-4 h-4 mr-1" />
+              {isGeocoding ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : 'My Location'}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => mapRef.current?.flyTo({ center: [-122.44, 37.77], zoom: 11 })}
+            >
+              <Navigation className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+
         {/* Base Map Selector */}
         <div className="p-4 border-b border-gray-100">
           <label className="block text-sm font-medium text-gray-700 mb-2">Base Map</label>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-2">
             {baseMaps.map((bm) => (
               <button
                 key={bm.id}
@@ -140,7 +707,7 @@ export default function FieldMap() {
         <Tabs defaultValue="layers" onChange={setActiveTab} className="flex-1 overflow-hidden">
           <TabsList className="border-b border-gray-100 px-3">
             <TabsTrigger value="layers" className="px-2">Layers</TabsTrigger>
-            <TabsTrigger value="fields" className="px-2">Fields</TabsTrigger>
+            <TabsTrigger value="location" className="px-2">Location</TabsTrigger>
             <TabsTrigger value="legend" className="px-2">Legend</TabsTrigger>
           </TabsList>
 
@@ -195,45 +762,262 @@ export default function FieldMap() {
             </div>
           </TabsContent>
 
-          <TabsContent value="fields">
+          <TabsContent value="location">
             <div className="p-3 overflow-y-auto flex-1">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="font-medium text-gray-900">{mockFields.length} Fields</h3>
-                <Button variant="ghost" size="sm" onClick={() => setDrawingMode(!drawingMode)}>
-                  <Plus className="w-4 h-4 mr-1" /> Add Field
-                </Button>
-              </div>
+              {selectedLocation ? (
+                <div className="space-y-4">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <MapPin className="w-5 h-5 text-primary-600" />
+                        Selected Location
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-3">
+                        <div className="p-3 rounded-lg bg-gray-50">
+                          <p className="text-sm text-gray-500">Coordinates</p>
+                          <p className="font-mono text-sm">{selectedLocation.lat.toFixed(6)}, {selectedLocation.lng.toFixed(6)}</p>
+                        </div>
+                        {selectedLocation.address && (
+                          <div className="p-3 rounded-lg bg-gray-50">
+                            <p className="text-sm text-gray-500">Address</p>
+                            <p className="text-sm text-gray-900">{selectedLocation.address}</p>
+                          </div>
+                        )}
+                        {/* Auto-determined location details */}
+                        {(selectedLocation.country || selectedLocation.state || selectedLocation.region) && (
+                          <div className="p-3 rounded-lg bg-blue-50 border border-blue-200">
+                            <p className="text-sm text-blue-700 font-medium flex items-center gap-1">
+                              <Globe className="w-3 h-3" />
+                              Auto-detected Location Details
+                            </p>
+                            <div className="grid grid-cols-2 gap-2 mt-2 text-sm">
+                              {selectedLocation.country && (
+                                <div>
+                                  <p className="text-blue-500">Country</p>
+                                  <p className="font-medium text-blue-900">{selectedLocation.country}</p>
+                                </div>
+                              )}
+                              {selectedLocation.state && (
+                                <div>
+                                  <p className="text-blue-500">State/Province</p>
+                                  <p className="font-medium text-blue-900">{selectedLocation.state}</p>
+                                </div>
+                              )}
+                              {selectedLocation.region && (
+                                <div>
+                                  <p className="text-blue-500">Region/District</p>
+                                  <p className="font-medium text-blue-900">{selectedLocation.region}</p>
+                                </div>
+                              )}
+                              {selectedLocation.county && (
+                                <div>
+                                  <p className="text-blue-500">County</p>
+                                  <p className="font-medium text-blue-900">{selectedLocation.county}</p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                        <div className="grid grid-cols-2 gap-2 text-sm">
+                          <div className="p-2 rounded bg-gray-100">
+                            <p className="text-gray-500">Lat</p>
+                            <p className="font-medium">{selectedLocation.lat.toFixed(6)}°</p>
+                          </div>
+                          <div className="p-2 rounded bg-gray-100">
+                            <p className="text-gray-500">Lng</p>
+                            <p className="font-medium">{selectedLocation.lng.toFixed(6)}°</p>
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
 
-              {drawingMode && (
-                <div className="mb-3 p-3 rounded-lg bg-yellow-50 border border-yellow-200">
-                  <p className="text-sm text-yellow-800">Click on map to draw field boundary. Press ESC to cancel.</p>
+                  {/* Farm Creation Form - Auto-filled with detected location data */}
+                  {showFarmForm && (
+                    <Card className="border-primary-200 bg-primary-50">
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2 text-primary-700">
+                          <FileCheck className="w-5 h-5" />
+                          Create New Farm
+                        </CardTitle>
+                        <p className="text-sm text-primary-600">Auto-filled from selected location. Review and save.</p>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        {/* Farm Name */}
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Farm Name</label>
+                          <Input
+                            value={farmFormData.name || ''}
+                            onChange={(e) => setFarmFormData({...farmFormData, name: e.target.value})}
+                            placeholder="e.g., North Field, Section 14"
+                          />
+                        </div>
+
+                        {/* Crop */}
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Primary Crop</label>
+                          <Select
+                            value={farmFormData.crop || 'Maize'}
+                            onChange={(e) => setFarmFormData({...farmFormData, crop: e.target.value})}
+                            options={[
+                              { value: 'Maize', label: 'Maize (Corn)' },
+                              { value: 'Wheat', label: 'Wheat' },
+                              { value: 'Soybean', label: 'Soybean' },
+                              { value: 'Rice', label: 'Rice' },
+                              { value: 'Barley', label: 'Barley' },
+                              { value: 'Cotton', label: 'Cotton' },
+                              { value: 'Other', label: 'Other' },
+                            ]}
+                          />
+                        </div>
+
+                        {/* Area */}
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Area</label>
+                          <Input
+                            value={farmFormData.area || '1 ha'}
+                            onChange={(e) => setFarmFormData({...farmFormData, area: e.target.value})}
+                            placeholder="e.g., 10 ha, 25 acres"
+                          />
+                        </div>
+
+                        {/* Soil Type - Auto-determined */}
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1">
+                            Soil Type <span className="text-xs text-green-600">(auto-detected)</span>
+                          </label>
+                          <div className="relative">
+                            {isDeterminingSoil && (
+                              <div className="absolute inset-0 flex items-center justify-center bg-white/80">
+                                <Loader2 className="w-5 h-5 animate-spin text-primary-600" />
+                              </div>
+                            )}
+                            <Input
+                              value={farmFormData.soilType || soilType}
+                              onChange={(e) => setFarmFormData({...farmFormData, soilType: e.target.value})}
+                              disabled={isDeterminingSoil}
+                              placeholder="Determining soil type..."
+                            />
+                            {soilType && !isDeterminingSoil && (
+                              <MapPinIcon className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-green-500" />
+                            )}
+                          </div>
+                          {soilType && !isDeterminingSoil && (
+                            <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
+                              <CheckCircle className="w-3 h-3" />
+                              Based on climate zone for this latitude
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Description - Auto-filled with location info */}
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                          <Input
+                            value={farmFormData.description || ''}
+                            onChange={(e) => setFarmFormData({...farmFormData, description: e.target.value})}
+                            placeholder="Optional notes about this field"
+                            className="min-h-[80px]"
+                          />
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="flex gap-2 pt-2 border-t border-gray-200">
+                          <Button
+                            variant="secondary"
+                            className="flex-1"
+                            onClick={() => { setShowFarmForm(false); setSelectedLocation(null); }}
+                          >
+                            <X className="w-4 h-4 mr-2" />
+                            Cancel
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            className="flex-1"
+                            onClick={handleCollectData}
+                            disabled={triggerCollection.isPending}
+                          >
+                            <RefreshCw className={cn('w-4 h-4 mr-2', triggerCollection.isPending && 'animate-spin')} />
+                            {triggerCollection.isPending ? 'Collecting...' : 'Collect NASA Data'}
+                          </Button>
+                          <Button
+                            className="flex-1"
+                            onClick={handleSaveFarm}
+                            disabled={isSavingFarm}
+                          >
+                            <Save className={cn('w-4 h-4 mr-2', isSavingFarm && 'animate-spin')} />
+                            {isSavingFarm ? 'Saving...' : 'Save Farm'}
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {!showFarmForm && (
+                    <>
+                      {/* Quick Actions for selected location */}
+                      <Card>
+                        <CardHeader>
+                          <CardTitle>Quick Actions</CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-2">
+                          <Button
+                            className="w-full justify-start"
+                            onClick={() => setShowFarmForm(true)}
+                          >
+                            <FileCheck className="w-4 h-4 mr-2" />
+                            Create Farm Here
+                          </Button>
+                          <Button
+                            className="w-full justify-start"
+                            onClick={handleCollectData}
+                            disabled={triggerCollection.isPending}
+                          >
+                            <RefreshCw className={cn('w-4 h-4 mr-2', triggerCollection.isPending && 'animate-spin')} />
+                            {triggerCollection.isPending ? 'Collecting...' : 'Collect NASA Data'}
+                          </Button>
+                          <Button variant="secondary" className="w-full justify-start" onClick={() => setSelectedLocation(null)}>
+                            <X className="w-4 h-4 mr-2" />
+                            Clear Selection
+                          </Button>
+                        </CardContent>
+                      </Card>
+
+                      {/* Date Range for collection */}
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="text-base">Collection Period</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="grid grid-cols-2 gap-2">
+                            <Input
+                              type="date"
+                              value={dateRange.start}
+                              onChange={(e) => setDateRange({...dateRange, start: e.target.value})}
+                              label="Start"
+                            />
+                            <Input
+                              type="date"
+                              value={dateRange.end}
+                              onChange={(e) => setDateRange({...dateRange, end: e.target.value})}
+                              label="End"
+                            />
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </>
+                  )}
+
+                </div>
+              ) : (
+                <div className="text-center py-12 text-gray-500">
+                  <MapPin className="w-16 h-16 mx-auto mb-4 text-gray-300" />
+                  <p className="font-medium text-gray-900 mb-1">No location selected</p>
+                  <p className="text-sm">Click on the map or search for a location</p>
                 </div>
               )}
-
-              <div className="space-y-2">
-                {mockFields.map((field) => (
-                  <button
-                    key={field.id}
-                    onClick={() => handleFieldClick(field)}
-                    className={cn(
-                      'w-full p-3 rounded-lg text-left transition-all',
-                      selectedField?.id === field.id
-                        ? 'bg-primary-50 border border-primary-200'
-                        : 'hover:bg-gray-50'
-                    )}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-medium text-gray-900">{field.name}</p>
-                        <p className="text-sm text-gray-500">{field.crop} • {field.area} ha</p>
-                      </div>
-                      <Badge variant={field.health >= 80 ? 'success' : field.health >= 60 ? 'warning' : 'danger'}>
-                        {field.health}
-                      </Badge>
-                    </div>
-                  </button>
-                ))}
-              </div>
             </div>
           </TabsContent>
 
@@ -263,64 +1047,36 @@ export default function FieldMap() {
           </TabsContent>
         </Tabs>
 
-        {/* Date Range */}
-        <div className="p-4 border-t border-gray-100">
-          <label className="block text-sm font-medium text-gray-700 mb-2">Date Range</label>
-          <div className="grid grid-cols-2 gap-2">
-            <Input
-              type="date"
-              value={dateRange.start}
-              onChange={(e) => setDateRange({...dateRange, start: e.target.value})}
-              label="Start"
-            />
-            <Input
-              type="date"
-              value={dateRange.end}
-              onChange={(e) => setDateRange({...dateRange, end: e.target.value})}
-              label="End"
-            />
+        {/* Error display */}
+        {mapError && (
+          <div className="p-4 border-t border-red-200 bg-red-50 text-red-700 text-sm flex items-center gap-2">
+            <AlertCircle className="w-4 h-4" />
+            <span>Map Error: {mapError}</span>
           </div>
-        </div>
+        )}
       </aside>
 
       {/* Map Container */}
       <div className="flex-1 relative overflow-hidden" ref={mapContainerRef}>
-        {/* Map Placeholder */}
-        <div className="absolute inset-0 bg-gradient-to-br from-green-100 via-blue-50 to-yellow-50 flex items-center justify-center">
-          <div className="text-center p-8">
-            <div className="w-24 h-24 mx-auto mb-4 rounded-full bg-primary-100 flex items-center justify-center">
-              <Layers className="w-12 h-12 text-primary-600" />
-            </div>
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">Interactive Map</h3>
-            <p className="text-gray-500 mb-6 max-w-md mx-auto">
-              MapLibre GL integration ready. Connect to NASA data layers via tile services (WMTS, XYZ, COG).
-            </p>
-            <div className="flex gap-3 justify-center">
-              <Button variant="secondary" size="sm">
-                <Download className="w-4 h-4 mr-1" />
-                Export Image
-              </Button>
-              <Button variant="ghost" size="sm">
-                <Settings className="w-4 h-4 mr-1" />
-                Map Settings
-              </Button>
+        {!mapLoaded && (
+          <div className="absolute inset-0 bg-gradient-to-br from-green-100 via-blue-50 to-yellow-50 flex items-center justify-center z-10">
+            <div className="text-center p-8">
+              <Loader2 className="w-12 h-12 text-primary-600 mx-auto mb-4 animate-spin" />
+              <p className="text-gray-500">Loading map...</p>
             </div>
           </div>
-        </div>
+        )}
 
         {/* Map Controls Overlay */}
         <div className="absolute top-4 right-4 flex flex-col gap-2 z-10">
-          <Button variant="secondary" size="sm" className="w-10 h-10 p-0" aria-label="Zoom in">
+          <Button variant="secondary" size="sm" className="w-10 h-10 p-0" aria-label="Zoom in" onClick={() => mapRef.current?.zoomIn()}>
             <Plus className="w-5 h-5" />
           </Button>
-          <Button variant="secondary" size="sm" className="w-10 h-10 p-0" aria-label="Zoom out">
+          <Button variant="secondary" size="sm" className="w-10 h-10 p-0" aria-label="Zoom out" onClick={() => mapRef.current?.zoomOut()}>
             <Minus className="w-5 h-5" />
           </Button>
-          <Button variant="secondary" size="sm" className="w-10 h-10 p-0" aria-label="Fullscreen">
-            <Expand className="w-5 h-5" />
-          </Button>
-          <Button variant="secondary" size="sm" className="w-10 h-10 p-0" aria-label="Locate me">
-            <MapPin className="w-5 h-5" />
+          <Button variant="secondary" size="sm" className="w-10 h-10 p-0" aria-label="My location" onClick={useCurrentLocation}>
+            <Target className="w-5 h-5" />
           </Button>
         </div>
 
@@ -331,140 +1087,132 @@ export default function FieldMap() {
 
         {/* Coordinates */}
         <div className="absolute bottom-4 right-4 bg-white/90 backdrop-blur-sm rounded-lg px-3 py-2 text-xs text-gray-600 shadow-sm z-10">
-          Lon: {mapView.center[0].toFixed(4)}°, Lat: {mapView.center[1].toFixed(4)}°
+          Lon: {mapView.center.lng.toFixed(4)}°, Lat: {mapView.center.lat.toFixed(4)}°
         </div>
+
+        {/* Selected location indicator */}
+        {selectedLocation && (
+          <div className="absolute bottom-20 right-4 bg-white/95 backdrop-blur-sm rounded-lg px-3 py-2 shadow-lg z-10 border border-primary-200">
+            <div className="flex items-center gap-2 text-sm">
+              <MapPin className="w-4 h-4 text-primary-600" />
+              <span className="font-medium">Selected: {selectedLocation.lat.toFixed(4)}, {selectedLocation.lng.toFixed(4)}</span>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Right Panel - Field Details */}
-      {selectedField && (
+      {/* Right Panel - Data Collection & Analysis */}
+      {selectedLocation && (
         <aside className="w-80 bg-white border-l border-gray-200 flex flex-col overflow-hidden">
           <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-            <h2 className="font-semibold text-gray-900">Field Details</h2>
-            <Button variant="ghost" size="sm" onClick={() => setSelectedField(null)}>
+            <h2 className="font-semibold text-gray-900">Data Collection</h2>
+            <Button variant="ghost" size="sm" onClick={() => setSelectedLocation(null)}>
               <X className="w-4 h-4" />
             </Button>
           </div>
 
           <div className="flex-1 overflow-y-auto p-4">
             <div className="space-y-6">
-              {/* Field Info */}
+              {/* Location Info */}
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center justify-between">
-                    <span>{selectedField.name}</span>
-                    <Badge variant={selectedField.health >= 80 ? 'success' : selectedField.health >= 60 ? 'warning' : 'danger'}>
-                      Health: {selectedField.health}
-                    </Badge>
+                    <span>Selected Field</span>
+                    <Badge variant="info" size="sm">Ready for Analysis</Badge>
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <p className="text-sm text-gray-500">Crop</p>
-                      <p className="font-medium">{selectedField.crop}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-500">Area</p>
-                      <p className="font-medium">{selectedField.area} ha</p>
-                    </div>
-                    <div>
                       <p className="text-sm text-gray-500">Coordinates</p>
-                      <p className="font-medium text-sm font-mono">{selectedField.coords[1].toFixed(4)}, {selectedField.coords[0].toFixed(4)}</p>
+                      <p className="font-medium text-sm font-mono">{selectedLocation.lat.toFixed(4)}, {selectedLocation.lng.toFixed(4)}</p>
                     </div>
                     <div>
-                      <p className="text-sm text-gray-500">Bounds</p>
-                      <p className="font-medium text-sm font-mono text-xs">
-                        [{selectedField.bbox[0].toFixed(3)}, {selectedField.bbox[1].toFixed(3)}, {selectedField.bbox[2].toFixed(3)}, {selectedField.bbox[3].toFixed(3)}]
-                      </p>
+                      <p className="text-sm text-gray-500">Address</p>
+                      <p className="font-medium text-sm truncate">{selectedLocation.address || 'Unknown'}</p>
                     </div>
                   </div>
-                  <div className="mt-4 h-2 bg-gray-200 rounded-full overflow-hidden">
-                    <div className="h-full bg-green-500 rounded-full transition-all" style={{ width: `${selectedField.health}%` }} />
-                  </div>
+                  {/* Auto-determined location details */}
+                  {(selectedLocation.country || selectedLocation.state || selectedLocation.region) && (
+                    <div className="mt-3 p-3 rounded-lg bg-blue-50 border border-blue-200">
+                      <p className="text-sm text-blue-700 font-medium flex items-center gap-1">
+                        <Globe className="w-3 h-3" />
+                        Auto-detected Location Details
+                      </p>
+                      <div className="grid grid-cols-2 gap-2 mt-2 text-sm">
+                        {selectedLocation.country && (
+                          <div>
+                            <p className="text-blue-500">Country</p>
+                            <p className="font-medium text-blue-900">{selectedLocation.country}</p>
+                          </div>
+                        )}
+                        {selectedLocation.state && (
+                          <div>
+                            <p className="text-blue-500">State/Province</p>
+                            <p className="font-medium text-blue-900">{selectedLocation.state}</p>
+                          </div>
+                        )}
+                        {selectedLocation.region && (
+                          <div>
+                            <p className="text-blue-500">Region/District</p>
+                            <p className="font-medium text-blue-900">{selectedLocation.region}</p>
+                          </div>
+                        )}
+                        {selectedLocation.county && (
+                          <div>
+                            <p className="text-blue-500">County</p>
+                            <p className="font-medium text-blue-900">{selectedLocation.county}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  {/* Soil type indicator */}
+                  {soilType && (
+                    <div className="mt-3 p-3 rounded-lg bg-green-50 border border-green-200">
+                      <p className="text-sm text-green-700 font-medium flex items-center gap-1">
+                        <Leaf className="w-3 h-3" />
+                        Soil Type (Auto-detected)
+                      </p>
+                      <p className="text-sm text-green-900 mt-1">{soilType}</p>
+                    </div>
+                  )}
                 </CardContent>
                 <CardFooter className="flex gap-2">
-                  <Button size="sm" className="flex-1">
-                    <Leaf className="w-4 h-4 mr-1" />
-                    Soil Health
+                  <Button size="sm" className="flex-1" onClick={handleCollectData} disabled={triggerCollection.isPending}>
+                    <RefreshCw className={cn('w-4 h-4 mr-1', triggerCollection.isPending && 'animate-spin')} />
+                    {triggerCollection.isPending ? 'Collecting...' : 'Collect NASA Data'}
                   </Button>
-                  <Button variant="secondary" size="sm" className="flex-1">
-                    <BarChart3 className="w-4 h-4 mr-1" />
-                    Yield Predict
+                  <Button size="sm" className="flex-1" onClick={() => setShowFarmForm(true)} disabled={isSavingFarm}>
+                    <Save className="w-4 h-4 mr-1" />
+                    Save Farm
                   </Button>
                 </CardFooter>
               </Card>
 
-              {/* Quick Actions */}
+              {/* Available Data Sources */}
               <Card>
                 <CardHeader>
-                  <CardTitle>Quick Actions</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-2 gap-2">
-                    <Button variant="ghost" size="sm" className="h-auto py-3">
-                      <Droplet className="w-5 h-5 mx-auto mb-1" />
-                      <span className="text-xs">Soil Moisture</span>
-                    </Button>
-                    <Button variant="ghost" size="sm" className="h-auto py-3">
-                      <Leaf className="w-5 h-5 mx-auto mb-1" />
-                      <span className="text-xs">Vegetation</span>
-                    </Button>
-                    <Button variant="ghost" size="sm" className="h-auto py-3">
-                      <Thermometer className="w-5 h-5 mx-auto mb-1" />
-                      <span className="text-xs">Temperature</span>
-                    </Button>
-                    <Button variant="ghost" size="sm" className="h-auto py-3">
-                      <Cloud className="w-5 h-5 mx-auto mb-1" />
-                      <span className="text-xs">Precipitation</span>
-                    </Button>
-                    <Button variant="ghost" size="sm" className="h-auto py-3">
-                      <Wind className="w-5 h-5 mx-auto mb-1" />
-                      <span className="text-xs">ET / Stress</span>
-                    </Button>
-                    <Button variant="ghost" size="sm" className="h-auto py-3">
-                      <Sun className="w-5 h-5 mx-auto mb-1" />
-                      <span className="text-xs">ECOSTRESS</span>
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Time Series Placeholder */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Time Series (Last 30 Days)</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="h-40 flex items-end justify-center gap-2 px-2">
-                    {[45, 48, 52, 49, 55, 58, 56, 60, 62, 59, 65, 68, 66, 70, 72, 69, 73, 75, 72, 76, 78, 75, 79, 80, 78, 82, 81, 83, 82, 85].map((v, i) => (
-                      <div key={i} className="flex-1 max-w-6 h-full bg-primary-500 rounded-t transition-all hover:bg-primary-600" style={{ height: `${v}%` }} title={`Day ${i+1}: ${v}%`} />
-                    ))}
-                  </div>
-                  <p className="text-center text-sm text-gray-500 mt-2">NDVI Trend (Landsat 30m)</p>
-                </CardContent>
-              </Card>
-
-              {/* Data Sources Available */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Available Data Layers</CardTitle>
+                  <CardTitle>Available NASA Data Layers</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-2">
                     {[
-                      { name: 'SMAP Soil Moisture', status: 'Available', freq: 'Daily', res: '9 km' },
-                      { name: 'MODIS NDVI/EVI', status: 'Available', freq: '16-day', res: '250 m' },
-                      { name: 'Landsat 8/9 SR', status: 'Available', freq: '16-day', res: '30 m' },
-                      { name: 'GPM Precipitation', status: 'Available', freq: '30-min', res: '0.1°' },
-                      { name: 'ECOSTRESS ET/LST', status: 'Available', freq: '~4-day', res: '70 m' },
-                      { name: 'OpenET ET', status: 'Requires API Key', freq: 'Monthly', res: '30 m' },
+                      { name: 'SMAP Soil Moisture', status: 'Available', freq: 'Daily', res: '9 km', sources: ['SMAP'] },
+                      { name: 'MODIS NDVI/EVI', status: 'Available', freq: '16-day', res: '250 m', sources: ['MODIS'] },
+                      { name: 'Landsat 8/9 SR', status: 'Available', freq: '16-day', res: '30 m', sources: ['Landsat'] },
+                      { name: 'GPM Precipitation', status: 'Available', freq: '30-min', res: '0.1°', sources: ['GPM'] },
+                      { name: 'ECOSTRESS ET/LST', status: 'Available', freq: '~4-day', res: '70 m', sources: ['ECOSTRESS'] },
+                      { name: 'OpenET ET', status: 'Requires API Key', freq: 'Monthly', res: '30 m', sources: ['OpenET'] },
+                      { name: 'Crop-CASMA', status: 'Available (CONUS)', freq: 'Daily', res: '1 km', sources: ['NASA-USDA'] },
+                      { name: 'ICESat-2 ATL24', status: 'Available (Coastal)', freq: 'Continuous', res: '~10 m', sources: ['ICESat-2'] },
                     ].map((d, i) => (
                       <div key={i} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
                         <div>
                           <p className="text-sm font-medium text-gray-900">{d.name}</p>
-                          <p className="text-xs text-gray-500">{d.freq} • {d.res}</p>
+                          <p className="text-xs text-gray-500">{d.freq} • {d.res} • {d.sources.join(', ')}</p>
                         </div>
-                        <Badge variant={d.status === 'Available' ? 'success' : 'warning'} size="sm">
+                        <Badge variant={d.status.includes('Available') ? 'success' : 'warning'} size="sm">
                           {d.status}
                         </Badge>
                       </div>
@@ -472,6 +1220,46 @@ export default function FieldMap() {
                   </div>
                 </CardContent>
               </Card>
+
+              {/* ML Analysis Quick Actions */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>AI Analysis Tools</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button variant="ghost" size="sm" className="h-auto py-3" onClick={() => window.open('/soil-health', '_blank')}>
+                      <Leaf className="w-5 h-5 mx-auto mb-1" />
+                      <span className="text-xs">Soil Health</span>
+                    </Button>
+                    <Button variant="ghost" size="sm" className="h-auto py-3" onClick={() => window.open('/rotation-planner', '_blank')}>
+                      <GitBranch className="w-5 h-5 mx-auto mb-1" />
+                      <span className="text-xs">Crop Rotation</span>
+                    </Button>
+                    <Button variant="ghost" size="sm" className="h-auto py-3" onClick={() => window.open('/yield-predictor', '_blank')}>
+                      <BarChart3 className="w-5 h-5 mx-auto mb-1" />
+                      <span className="text-xs">Yield Predictor</span>
+                    </Button>
+                    <Button variant="ghost" size="sm" className="h-auto py-3" onClick={() => window.open('/water-stress', '_blank')}>
+                      <Droplet className="w-5 h-5 mx-auto mb-1" />
+                      <span className="text-xs">Water Stress</span>
+                    </Button>
+                  </div>
+                  <p className="text-center text-xs text-gray-500 mt-2">Opens in new tab with selected coordinates</p>
+                </CardContent>
+              </Card>
+
+              {/* Collection Status */}
+              {triggerCollection.error && (
+                <Card className="border-red-200 bg-red-50">
+                  <CardContent className="p-4 text-red-700">
+                    <div className="flex items-center gap-2">
+                      <AlertCircle className="w-5 h-5" />
+                      <span className="text-sm">Collection failed: {triggerCollection.error.message}</span>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
             </div>
           </div>
         </aside>

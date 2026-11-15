@@ -18,11 +18,11 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager."""
     # Startup
     settings = get_settings()
-    print(f"🚀 Starting Field Shift API in {settings.APP_ENV} mode")
-    print(f"📡 NASA Earthdata: {'Configured' if settings.EARTHDATA_USERNAME else 'Not configured'}")
+    print(f"[START] Starting Field Shift API in {settings.APP_ENV} mode")
+    print(f"[NASA] NASA Earthdata: {'Configured' if settings.EARTHDATA_USERNAME else 'Not configured'}")
     yield
     # Shutdown
-    print("🛑 Shutting down Field Shift API")
+    print("[STOP] Shutting down Field Shift API")
 
 
 def create_app() -> FastAPI:

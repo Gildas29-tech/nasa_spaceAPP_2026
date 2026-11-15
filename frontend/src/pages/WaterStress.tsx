@@ -1,21 +1,29 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { cn } from '../lib/utils'
 import {
   Droplet,
   AlertTriangle,
   CheckCircle,
   XCircle,
-  Calendar,
-  Clock,
   Zap,
-  Settings,
-  Download,
-  RefreshCw,
-  MapPin,
   Thermometer,
+  Sun,
   Cloud,
   Wind,
-  BarChart3,
+  MapPin,
+  Calendar,
+  RefreshCw,
+  Download,
+  Filter,
+  TrendingUp,
+  TrendingDown,
+  Minus,
+  Plus,
+  Home,
+  Settings,
+  Shield,
+  Bell,
+  Waves,
 } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
@@ -23,174 +31,159 @@ import { Badge } from '../components/ui/Badge'
 import { Input } from '../components/ui/Input'
 import { Select } from '../components/ui/Select'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../components/ui/Tabs'
+import { api } from '../lib/api'
+import { useFarmStore, type Farm } from '../stores/farmStore'
+import { useUIStore } from '../stores/uiStore'
 
-const mockAlerts = [
-  {
-    id: 1,
-    level: 'critical',
-    title: 'Severe Water Stress - South Field 3',
-    field: 'South Field 3',
-    crop: 'Corn',
-    time: '2 hours ago',
-    indicators: {
-      smap_sm: 15,
-      smap_rm: 18,
-      ndvi_anomaly: -0.25,
-      lst_anomaly: 4.2,
-      precip_deficit: -45,
-      et_fraction: 0.35,
-    },
-    recommendation: 'Irrigate immediately. Root zone moisture at 15th percentile. Expected yield loss >15% without action within 24h.',
-    lead_time: '0-24 hours',
-    confidence: 0.92,
-  },
-  {
-    id: 2,
-    level: 'warning',
-    title: 'Moderate Water Stress - North Field 1',
-    field: 'North Field 1',
-    crop: 'Corn',
-    time: '5 hours ago',
-    indicators: {
-      smap_sm: 32,
-      smap_rm: 38,
-      ndvi_anomaly: -0.12,
-      lst_anomaly: 2.8,
-      precip_deficit: -28,
-      et_fraction: 0.55,
-    },
-    recommendation: 'Schedule irrigation within 48h. Monitor soil moisture daily. Consider deficit irrigation if water limited.',
-    lead_time: '2-5 days',
-    confidence: 0.85,
-  },
-  {
-    id: 3,
-    level: 'warning',
-    title: 'Heat Stress - East Field 2',
-    field: 'East Field 2',
-    crop: 'Wheat',
-    time: '8 hours ago',
-    indicators: {
-      smap_sm: 45,
-      smap_rm: 52,
-      ndvi_anomaly: -0.08,
-      lst_anomaly: 5.1,
-      precip_deficit: -15,
-      et_fraction: 0.62,
-    },
-    recommendation: 'High temperatures (>35°C) for 5 consecutive days. Monitor for pollination impact on wheat. Consider evaporative cooling if available.',
-    lead_time: '3-7 days',
-    confidence: 0.78,
-  },
-  {
-    id: 4,
-    level: 'info',
-    title: 'Optimal Conditions - Central Field 4',
-    field: 'Central Field 4',
-    crop: 'Alfalfa',
-    time: '1 day ago',
-    indicators: {
-      smap_sm: 72,
-      smap_rm: 78,
-      ndvi_anomaly: 0.15,
-      lst_anomaly: -1.2,
-      precip_deficit: 12,
-      et_fraction: 0.85,
-    },
-    recommendation: 'No action needed. Soil moisture and vegetation indices are optimal for current growth stage.',
-    lead_time: 'N/A',
-    confidence: 0.95,
-  },
-]
+interface WaterStressAlert {
+  id: string
+  farm_id: string
+  severity: 'low' | 'medium' | 'high' | 'critical'
+  type: 'water_stress' | 'drought_risk' | 'irrigation_needed' | 'heat_stress'
+  message: string
+  detected_at: string
+  et_value: number
+  et_threshold: number
+  lst_value: number
+  soil_moisture: number
+  precipitation_forecast: number
+  recommendations: string[]
+  location: { lat: number; lon: number }
+  field_name: string
+}
 
-const mockIrrigationSchedule = [
-  { field: 'South Field 3', crop: 'Corn', priority: 'Urgent', recommended_date: 'Today', amount: '1.5 in', method: 'Pivot', reason: 'Critical root zone depletion' },
-  { field: 'North Field 1', crop: 'Corn', priority: 'High', recommended_date: 'Tomorrow', amount: '1.0 in', method: 'Pivot', reason: 'Approaching stress threshold' },
-  { field: 'East Field 2', crop: 'Wheat', priority: 'Medium', recommended_date: 'In 3 days', amount: '0.8 in', method: 'Drip', reason: 'Heat stress mitigation' },
-  { field: 'West Field 1', crop: 'Soybean', priority: 'Low', recommended_date: 'In 5 days', amount: '0.5 in', method: 'Pivot', reason: 'Maintenance irrigation' },
-]
+interface IrrigationEvent {
+  date: string
+  amount_mm: number
+  method: 'drip' | 'sprinkler' | 'flood' | 'pivot'
+  source: 'groundwater' | 'surface' | 'municipal' | 'recycled'
+  cost: number
+  efficiency: number
+}
 
-const indicatorDetails = [
-  { key: 'smap_sm', label: 'SMAP Surface SM', icon: Droplet, desc: 'Surface soil moisture (0-5cm)', unit: 'percentile', good: '>60', warn: '30-60', critical: '<30' },
-  { key: 'smap_rm', label: 'SMAP Root Zone SM', icon: Droplet, desc: 'Root zone soil moisture (0-100cm)', unit: 'percentile', good: '>50', warn: '25-50', critical: '<25' },
-  { key: 'ndvi_anomaly', label: 'NDVI Anomaly', icon: BarChart3, desc: 'Vegetation health deviation from normal', unit: 'index', good: '>-0.1', warn: '-0.1 to -0.2', critical: '<-0.2' },
-  { key: 'lst_anomaly', label: 'LST Anomaly', icon: Thermometer, desc: 'Land surface temperature deviation', unit: '°C', good: '<1', warn: '1-3', critical: '>3' },
-  { key: 'precip_deficit', label: 'Precip Deficit', icon: Cloud, desc: 'Precipitation deficit vs 30-yr normal', unit: '%', good: '>-10', warn: '-10 to -30', critical: '<-30' },
-  { key: 'et_fraction', label: 'ET Fraction', icon: Wind, desc: 'Actual ET / Potential ET', unit: 'ratio', good: '>0.7', warn: '0.4-0.7', critical: '<0.4' },
-]
+interface WaterStressResult {
+  alerts: WaterStressAlert[]
+  irrigation_schedule: IrrigationEvent[]
+  water_balance: {
+    current_et: number
+    potential_et: number
+    soil_moisture: number
+    field_capacity: number
+    wilting_point: number
+    available_water: number
+    days_to_stress: number
+  }
+  et_data: Array<{ date: string; et_actual: number; et_potential: number; stress_index: number }>
+  lst_data: Array<{ date: string; lst_min: number; lst_max: number; lst_mean: number }>
+  precipitation: Array<{ date: string; amount: number }>
+  model_performance: {
+    et_accuracy: number
+    stress_detection_f1: number
+  }
+}
 
-export default function WaterStress() {
+const severityColors = {
+  low: 'text-green-600 bg-green-50 border-green-200',
+  medium: 'text-yellow-600 bg-yellow-50 border-yellow-200',
+  high: 'text-orange-600 bg-orange-50 border-orange-200',
+  critical: 'text-red-600 bg-red-50 border-red-200',
+}
+
+const severityIcons = {
+  low: CheckCircle,
+  medium: AlertTriangle,
+  high: AlertTriangle,
+  critical: XCircle,
+}
+
+const typeLabels = {
+  water_stress: 'Water Stress',
+  drought_risk: 'Drought Risk',
+  irrigation_needed: 'Irrigation Needed',
+  heat_stress: 'Heat Stress',
+}
+
+const typeIcons = {
+  water_stress: Droplet,
+  drought_risk: Sun,
+  irrigation_needed: Waves,
+  heat_stress: Thermometer,
+}
+
+export default function WaterStress({ farmId }: { farmId?: string }) {
+  const { farms, selectedFarmId, selectFarm } = useFarmStore()
+  const { addToast } = useUIStore()
   const [formData, setFormData] = useState({
     bbox: [-122.5, 37.5, -121.5, 38.5],
     startDate: '2024-01-01',
     endDate: '2024-12-31',
-    alertThreshold: 'warning',
-    includeForecast: true,
+    cropType: 'corn',
+    soilTexture: 'loam',
+    irrigationMethod: 'drip',
   })
-  const [alerts, setAlerts] = useState<typeof mockAlerts>(mockAlerts)
+  const [results, setResults] = useState<WaterStressResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [activeTab, setActiveTab] = useState('alerts')
-  const [selectedAlert, setSelectedAlert] = useState<typeof mockAlerts[0] | null>(null)
+  const [selectedFarm, setSelectedFarm] = useState<Farm | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [severityFilter, setSeverityFilter] = useState<string[]>([])
+
+  // Set selected farm when farms change or farmId prop is provided
+  useEffect(() => {
+    if (farmId) {
+      const farm = farms.find(f => f.id === farmId)
+      if (farm) {
+        setSelectedFarm(farm)
+        selectFarm(farm.id)
+      }
+    } else if (farms.length > 0) {
+      const farm = farms.find(f => f.id === selectedFarmId) || farms[0]
+      setSelectedFarm(farm)
+      selectFarm(farm.id)
+    } else {
+      setSelectedFarm(null)
+      selectFarm(null)
+    }
+  }, [farms, selectedFarmId, selectFarm, farmId])
 
   const handleAnalyze = async () => {
+    if (!selectedFarm) {
+      addToast({ type: 'warning', title: 'No farm selected', message: 'Please select a farm first' })
+      return
+    }
+
     setLoading(true)
-    await new Promise(r => setTimeout(r, 1500))
-    setLoading(false)
-    setActiveTab('alerts')
-  }
-
-  const getLevelColor = (level: string) => {
-    switch (level) {
-      case 'critical': return 'text-red-600 bg-red-100 border-red-200'
-      case 'warning': return 'text-orange-600 bg-orange-100 border-orange-200'
-      case 'info': return 'text-blue-600 bg-blue-100 border-blue-200'
-      default: return 'text-gray-600 bg-gray-100 border-gray-200'
+    setError(null)
+    try {
+      const data = await api.post<WaterStressResult>('/api/v1/analysis/water-stress', {
+        farm_id: selectedFarm.id,
+        bbox: formData.bbox,
+        start_date: formData.startDate,
+        end_date: formData.endDate,
+        crop_type: formData.cropType,
+        soil_texture: formData.soilTexture,
+        irrigation_method: formData.irrigationMethod,
+      })
+      setResults(data)
+      setActiveTab('alerts')
+      addToast({ type: 'success', title: 'Analysis complete', message: 'Water stress analysis generated' })
+    } catch (err: any) {
+      console.error('Water stress analysis failed:', err)
+      setError('Failed to generate water stress analysis')
+      addToast({ type: 'error', title: 'Analysis failed', message: 'Please try again' })
+    } finally {
+      setLoading(false)
     }
   }
 
-  const getLevelIcon = (level: string) => {
-    switch (level) {
-      case 'critical': return <AlertTriangle className="w-5 h-5" />
-      case 'warning': return <AlertTriangle className="w-5 h-5" />
-      case 'info': return <CheckCircle className="w-5 h-5" />
-      default: return <CheckCircle className="w-5 h-5" />
-    }
-  }
+  const filteredAlerts = results?.alerts?.filter(a =>
+    severityFilter.length === 0 || severityFilter.includes(a.severity)
+  ) || []
 
-  const getIndicatorStatus = (key: string, value: number) => {
-    const detail = indicatorDetails.find(d => d.key === key)
-    if (!detail) return 'unknown'
-    if (key === 'ndvi_anomaly' || key === 'precip_deficit') {
-      if (value > -0.1) return 'good'
-      if (value > -0.2) return 'warn'
-      return 'critical'
-    }
-    if (key === 'lst_anomaly') {
-      if (value < 1) return 'good'
-      if (value < 3) return 'warn'
-      return 'critical'
-    }
-    if (key === 'et_fraction') {
-      if (value > 0.7) return 'good'
-      if (value > 0.4) return 'warn'
-      return 'critical'
-    }
-    if (key === 'smap_sm' || key === 'smap_rm') {
-      if (value > 50) return 'good'
-      if (value > 25) return 'warn'
-      return 'critical'
-    }
-    return 'unknown'
-  }
+  const getSeverityColor = (severity: string) => severityColors[severity as keyof typeof severityColors]
+  const getSeverityIcon = (severity: string) => severityIcons[severity as keyof typeof severityIcons]
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'good': return 'text-green-600 bg-green-100'
-      case 'warn': return 'text-yellow-600 bg-yellow-100'
-      case 'critical': return 'text-red-600 bg-red-100'
-      default: return 'text-gray-600 bg-gray-100'
-    }
-  }
+  const waterBalance = results?.water_balance
 
   return (
     <div className="space-y-6">
@@ -198,24 +191,30 @@ export default function WaterStress() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-display font-bold text-gray-900">Water Stress Monitor</h1>
-          <p className="text-gray-500 mt-1">Early drought detection, irrigation scheduling, and water stress alerts</p>
+          <p className="text-gray-500 mt-1">Real-time ET, LST, and soil moisture analysis with irrigation scheduling</p>
         </div>
-        <Button onClick={handleAnalyze} loading={loading}>
+        <Button onClick={handleAnalyze} loading={loading} disabled={!selectedFarm || loading}>
           <RefreshCw className="w-4 h-4 mr-2" />
           Run Analysis
         </Button>
       </div>
 
       {/* Configuration */}
-      <Card className="border-l-4 border-l-primary-500">
+      <Card className="border-l-4 border-l-blue-500">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <MapPin className="w-5 h-5 text-primary-600" />
+            <Settings className="w-5 h-5 text-blue-600" />
             Analysis Configuration
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+          {selectedFarm && (
+            <div className="mb-4 p-3 rounded-lg bg-blue-50 border border-blue-200">
+              <p className="text-sm font-medium text-blue-800">Analyzing: {selectedFarm.name}</p>
+              <p className="text-xs text-blue-700">Location will be auto-filled from farm geometry</p>
+            </div>
+          )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4 mb-4">
             <Input
               label="West Longitude"
               type="number"
@@ -248,6 +247,34 @@ export default function WaterStress() {
               onChange={(e) => setFormData({...formData, bbox: [formData.bbox[0], formData.bbox[1], formData.bbox[2], parseFloat(e.target.value)]})}
               placeholder="38.5"
             />
+            <Select
+              label="Crop Type"
+              value={formData.cropType}
+              onChange={(e) => setFormData({...formData, cropType: e.target.value})}
+              options={[
+                { value: 'corn', label: 'Corn' },
+                { value: 'soybean', label: 'Soybean' },
+                { value: 'wheat', label: 'Wheat' },
+                { value: 'sorghum', label: 'Sorghum' },
+                { value: 'alfalfa', label: 'Alfalfa' },
+                { value: 'cotton', label: 'Cotton' },
+                { value: 'rice', label: 'Rice' },
+                { value: 'vegetables', label: 'Vegetables' },
+              ]}
+            />
+            <Select
+              label="Soil Texture"
+              value={formData.soilTexture}
+              onChange={(e) => setFormData({...formData, soilTexture: e.target.value})}
+              options={[
+                { value: 'sand', label: 'Sand' },
+                { value: 'loam', label: 'Loam' },
+                { value: 'clay', label: 'Clay' },
+                { value: 'silt', label: 'Silt' },
+                { value: 'sandy_loam', label: 'Sandy Loam' },
+                { value: 'clay_loam', label: 'Clay Loam' },
+              ]}
+            />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
@@ -264,31 +291,20 @@ export default function WaterStress() {
               onChange={(e) => setFormData({...formData, endDate: e.target.value})}
             />
             <Select
-              label="Alert Threshold"
-              value={formData.alertThreshold}
-              onChange={(e) => setFormData({...formData, alertThreshold: e.target.value})}
+              label="Irrigation Method"
+              value={formData.irrigationMethod}
+              onChange={(e) => setFormData({...formData, irrigationMethod: e.target.value})}
               options={[
-                { value: 'info', label: 'Info (All)' },
-                { value: 'warning', label: 'Warning & Critical' },
-                { value: 'critical', label: 'Critical Only' },
+                { value: 'drip', label: 'Drip Irrigation' },
+                { value: 'sprinkler', label: 'Sprinkler' },
+                { value: 'pivot', label: 'Center Pivot' },
+                { value: 'flood', label: 'Flood' },
               ]}
             />
-            <div className="flex items-end">
-              <label className="block w-full mb-1 text-sm font-medium text-gray-700">Include Forecast</label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={formData.includeForecast}
-                  onChange={(e) => setFormData({...formData, includeForecast: e.target.checked})}
-                  className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                />
-                <span className="text-sm">7-day forecast</span>
-              </label>
-            </div>
           </div>
 
           <div className="flex gap-2">
-            <Button onClick={handleAnalyze} loading={loading} className="flex-1">
+            <Button onClick={handleAnalyze} loading={loading} className="flex-1" disabled={!selectedFarm || loading}>
               <Zap className="w-4 h-4 mr-2" />
               Analyze Water Stress
             </Button>
@@ -297,392 +313,463 @@ export default function WaterStress() {
         </CardContent>
       </Card>
 
-      {/* Summary Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {[
-          { label: 'Critical Alerts', value: alerts.filter(a => a.level === 'critical').length, icon: AlertTriangle, color: 'text-red-600 bg-red-100' },
-          { label: 'Warnings', value: alerts.filter(a => a.level === 'warning').length, icon: AlertTriangle, color: 'text-orange-600 bg-orange-100' },
-          { label: 'Fields OK', value: alerts.filter(a => a.level === 'info').length, icon: CheckCircle, color: 'text-green-600 bg-green-100' },
-          { label: 'Total Fields', value: alerts.length, icon: BarChart3, color: 'text-blue-600 bg-blue-100' },
-        ].map((stat) => (
-          <Card key={stat.label}>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-500">{stat.label}</p>
-                  <p className="text-3xl font-bold text-gray-900 mt-1">{stat.value}</p>
+      {error && (
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="p-4 flex items-center gap-3 text-red-700">
+            <AlertTriangle className="w-5 h-5" />
+            <span>{error}</span>
+            <Button variant="ghost" size="sm" onClick={handleAnalyze} className="ml-auto">
+              <RefreshCw className="w-4 h-4 mr-1" />
+              Réessayer
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Quick Stats */}
+      {results && waterBalance && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="p-3 rounded-xl bg-blue-100">
+                  <Droplet className="w-6 h-6 text-blue-600" />
                 </div>
-                <div className={cn('p-3 rounded-xl', stat.color)}>
-                  <stat.icon className="w-6 h-6" />
+                <div>
+                  <p className="text-sm text-gray-500">Current ET</p>
+                  <p className="text-2xl font-bold text-gray-900">{waterBalance.current_et.toFixed(1)} mm/day</p>
                 </div>
               </div>
             </CardContent>
           </Card>
-        ))}
-      </div>
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="p-3 rounded-xl bg-green-100">
+                  <Sun className="w-6 h-6 text-green-600" />
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">Potential ET</p>
+                  <p className="text-2xl font-bold text-gray-900">{waterBalance.potential_et.toFixed(1)} mm/day</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="p-3 rounded-xl bg-amber-100">
+                  <Waves className="w-6 h-6 text-amber-600" />
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">Soil Moisture</p>
+                  <p className="text-2xl font-bold text-gray-900">{waterBalance.soil_moisture.toFixed(1)}%</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="p-3 rounded-xl bg-blue-100">
+                  <Droplet className="w-6 h-6 text-blue-600" />
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">Available Water</p>
+                  <p className="text-2xl font-bold text-gray-900">{waterBalance.available_water.toFixed(1)} mm</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="p-3 rounded-xl bg-red-100">
+                  <AlertTriangle className="w-6 h-6 text-red-600" />
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">Days to Stress</p>
+                  <p className="text-2xl font-bold text-gray-900">{waterBalance.days_to_stress}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="p-3 rounded-xl bg-purple-100">
+                  <Shield className="w-6 h-6 text-purple-600" />
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">Active Alerts</p>
+                  <p className="text-2xl font-bold text-gray-900">{filteredAlerts.length}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Tabs */}
       <Tabs defaultValue="alerts" onChange={setActiveTab}>
         <TabsList>
-          <TabsTrigger value="alerts">Active Alerts ({alerts.length})</TabsTrigger>
+          <TabsTrigger value="alerts">Alerts</TabsTrigger>
           <TabsTrigger value="irrigation">Irrigation Schedule</TabsTrigger>
-          <TabsTrigger value="indicators">Indicators Detail</TabsTrigger>
-          <TabsTrigger value="forecast">Forecast</TabsTrigger>
+          <TabsTrigger value="et_data">ET Analysis</TabsTrigger>
+          <TabsTrigger value="water_balance">Water Balance</TabsTrigger>
         </TabsList>
 
+        {/* Alerts Tab */}
         <TabsContent value="alerts">
-          <div className="mt-4 space-y-4">
-            {alerts.map((alert) => (
-              <Card
-                key={alert.id}
-                className={cn('border-l-4 transition-all',
-                  alert.level === 'critical' && 'border-l-red-500',
-                  alert.level === 'warning' && 'border-l-orange-500',
-                  alert.level === 'info' && 'border-l-green-500',
-                  selectedAlert?.id === alert.id && 'ring-2 ring-primary-500'
-                )}
-                onClick={() => setSelectedAlert(alert)}
-              >
-                <CardContent className="p-6">
-                  <div className="flex items-start gap-4">
-                    <div className={cn('p-3 rounded-full flex-shrink-0', getLevelColor(alert.level))}>
-                      {getLevelIcon(alert.level)}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <h3 className="font-semibold text-gray-900">{alert.title}</h3>
-                          <div className="flex items-center gap-3 mt-1 text-sm text-gray-500">
-                            <span>{alert.field} • {alert.crop}</span>
-                            <Badge
-                              variant={
-                                alert.level === 'critical' ? 'danger' :
-                                alert.level === 'warning' ? 'warning' : 'success'
-                              }
-                              size="sm"
-                            >
-                              {alert.level.toUpperCase()}
-                            </Badge>
-                          </div>
+          <div className="mt-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold">Water Stress Alerts</h3>
+              <div className="flex gap-2">
+                {['critical', 'high', 'medium', 'low'].map((s) => (
+                  <label key={s} className="flex items-center gap-1 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={severityFilter.includes(s)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSeverityFilter([...severityFilter, s])
+                        } else {
+                          setSeverityFilter(severityFilter.filter(x => x !== s))
+                        }
+                      }}
+                      className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                    />
+                    <span className={`text-xs font-medium capitalize ${getSeverityColor(s).split(' ')[0]}`}>
+                      {s}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {filteredAlerts.length > 0 ? (
+              <div className="space-y-3">
+                {filteredAlerts.map((alert, i) => (
+                  <Card key={i} className={cn('border-l-4', getSeverityColor(alert.severity).replace('bg-', 'border-l-').replace('text-', ''))}>
+                    <CardContent className="p-4">
+                      <div className="flex items-start gap-4">
+                        <div className={cn('p-3 rounded-xl', getSeverityColor(alert.severity).replace('text-', 'bg-').replace('border-', ''))}>
+                          {(() => {
+                            const Icon = getSeverityIcon(alert.severity);
+                            return <Icon className="w-5 h-5" />;
+                          })()}
                         </div>
-                        <div className="text-right">
-                          <p className="text-sm text-gray-500">{alert.time}</p>
-                          <p className="text-xs text-gray-400">Confidence: {Math.round(alert.confidence * 100)}%</p>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <h4 className="font-semibold text-gray-900">
+                                {typeLabels[alert.type as keyof typeof typeLabels]}
+                              </h4>
+                              <Badge variant={alert.severity === 'critical' ? 'danger' : alert.severity === 'high' ? 'warning' : 'info'} size="sm">
+                                {alert.severity.toUpperCase()}
+                              </Badge>
+                            </div>
+                            <span className="text-sm text-gray-500">{new Date(alert.detected_at).toLocaleString()}</span>
+                          </div>
+                          <p className="text-gray-600 mt-1">{alert.message}</p>
+                          <div className="mt-3 flex flex-wrap gap-2 text-sm">
+                            <span className="flex items-center gap-1 text-gray-500">
+                              <MapPin className="w-3 h-3" />
+                              {alert.field_name}
+                            </span>
+                            <span className="flex items-center gap-1 text-gray-500">
+                              <Droplet className="w-3 h-3" />
+                              ET: {alert.et_value.toFixed(1)} mm (threshold: {alert.et_threshold.toFixed(1)})
+                            </span>
+                            <span className="flex items-center gap-1 text-gray-500">
+                              <Thermometer className="w-3 h-3" />
+                              LST: {alert.lst_value.toFixed(1)}°C
+                            </span>
+                            <span className="flex items-center gap-1 text-gray-500">
+                              <Waves className="w-3 h-3" />
+                              Soil: {alert.soil_moisture.toFixed(1)}%
+                            </span>
+                            <span className="flex items-center gap-1 text-gray-500">
+                              <Cloud className="w-3 h-3" />
+                              Precip: {alert.precipitation_forecast.toFixed(1)} mm
+                            </span>
+                          </div>
+                          {alert.recommendations.length > 0 && (
+                            <div className="mt-3 p-3 rounded-lg bg-gray-50">
+                              <p className="text-sm font-medium text-gray-900 mb-2">Recommendations:</p>
+                              <ul className="space-y-1 text-sm text-gray-600">
+                                {alert.recommendations.map((rec, j) => (
+                                  <li key={j} className="flex items-center gap-2">
+                                    <CheckCircle className="w-4 h-4 text-green-500" />
+                                    {rec}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
                         </div>
                       </div>
-
-                      {/* Quick Indicators */}
-                      <div className="flex flex-wrap gap-2 mt-3">
-                        {Object.entries(alert.indicators).map(([key, value]) => {
-                          const detail = indicatorDetails.find(d => d.key === key)
-                          const status = getIndicatorStatus(key, value as number)
-                          return (
-                            <Badge key={key} variant={status === 'good' ? 'success' : status === 'warn' ? 'warning' : 'danger'} size="sm">
-                              {detail?.label}: {typeof value === 'number' ? value.toFixed(1) : value}
-                            </Badge>
-                          )
-                        })}
-                      </div>
-
-                      {selectedAlert?.id === alert.id && (
-                        <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-                          <p className="font-medium text-gray-900 mb-2">Recommendation:</p>
-                          <p className="text-gray-700">{alert.recommendation}</p>
-                          <div className="flex gap-4 mt-3 text-sm text-gray-500">
-                            <span><Clock className="w-4 h-4 inline mr-1" /> Lead time: {alert.lead_time}</span>
-                            <span><Calendar className="w-4 h-4 inline mr-1" /> Detected: {alert.time}</span>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex flex-col items-end gap-2">
-                      <Badge variant={alert.level === 'critical' ? 'danger' : alert.level === 'warning' ? 'warning' : 'success'}>
-                        {alert.level.toUpperCase()}
-                      </Badge>
-                      {selectedAlert?.id !== alert.id && (
-                        <Button variant="ghost" size="sm">View Details</Button>
-                      )}
-                    </div>
-                  </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            ) : (
+              <Card>
+                <CardContent className="p-12 text-center">
+                  <CheckCircle className="w-12 h-12 mx-auto text-green-400 mb-4" />
+                  <h3 className="text-lg font-semibold text-gray-900 mb-1">No Active Alerts</h3>
+                  <p className="text-gray-500">No water stress alerts detected for the selected filters</p>
                 </CardContent>
               </Card>
-            ))}
+            )}
           </div>
         </TabsContent>
 
+        {/* Irrigation Schedule Tab */}
         <TabsContent value="irrigation">
           <div className="mt-4">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Recommended Irrigation Schedule</h3>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-gray-500 border-b border-gray-200">
-                    <th className="pb-3 font-medium">Field</th>
-                    <th className="pb-3 font-medium">Crop</th>
-                    <th className="pb-3 font-medium">Priority</th>
-                    <th className="pb-3 font-medium">Date</th>
-                    <th className="pb-3 font-medium">Amount</th>
-                    <th className="pb-3 font-medium">Method</th>
-                    <th className="pb-3 font-medium">Reason</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {mockIrrigationSchedule.map((item, i) => (
-                    <tr key={i} className="hover:bg-gray-50">
-                      <td className="py-3 font-medium">{item.field}</td>
-                      <td className="py-3">{item.crop}</td>
-                      <td className="py-3">
-                        <Badge
-                          variant={
-                            item.priority === 'Urgent' ? 'danger' :
-                            item.priority === 'High' ? 'warning' :
-                            item.priority === 'Medium' ? 'info' : 'success'
-                          }
-                          size="sm"
-                        >
-                          {item.priority}
-                        </Badge>
-                      </td>
-                      <td className="py-3">{item.recommended_date}</td>
-                      <td className="py-3 font-medium">{item.amount}</td>
-                      <td className="py-3">{item.method}</td>
-                      <td className="py-3 text-gray-600">{item.reason}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-              {[
-                { label: 'Total Water Needed', value: '3.8 in', icon: Droplet, color: 'text-blue-600' },
-                { label: 'Estimated Cost', value: '$2,840', icon: BarChart3, color: 'text-green-600' },
-                { label: 'Urgent Fields', value: '1', icon: AlertTriangle, color: 'text-red-600' },
-              ].map((stat) => (
-                <Card key={stat.label}>
-                  <CardContent className="p-6 text-center">
-                    <div className={cn('p-3 rounded-xl mb-3', stat.color.replace('text-', 'bg-').replace('600', '100'))}>
-                      <stat.icon className={cn('w-6 h-6', stat.color)} />
-                    </div>
-                    <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
-                    <p className="text-sm text-gray-500">{stat.label}</p>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="indicators">
-          <div className="mt-4">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Water Stress Indicators (Selected Field)</h3>
-
-            <div className="mb-6 flex gap-2">
-              {alerts.map((alert) => (
-                <Button
-                  key={alert.id}
-                  variant={selectedAlert?.id === alert.id ? 'primary' : 'secondary'}
-                  size="sm"
-                  onClick={() => setSelectedAlert(alert)}
-                >
-                  {alert.field} ({alert.level})
-                </Button>
-              ))}
-            </div>
-
-            {selectedAlert && (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {indicatorDetails.map((indicator) => {
-                  const value = selectedAlert.indicators[indicator.key as keyof typeof selectedAlert.indicators]
-                  const status = getIndicatorStatus(indicator.key, value as number)
-                  return (
-                    <Card key={indicator.key} className={cn('border-l-4',
-                      status === 'good' && 'border-l-green-500',
-                      status === 'warn' && 'border-l-yellow-500',
-                      status === 'critical' && 'border-l-red-500'
-                    )}>
-                      <CardHeader className="flex flex-row items-start justify-between pb-2">
+            <h3 className="text-lg font-semibold mb-4">Irrigation Schedule</h3>
+            {results?.irrigation_schedule && results.irrigation_schedule.length > 0 ? (
+              <div className="space-y-3">
+                {results.irrigation_schedule.map((event, i) => (
+                  <Card key={i}>
+                    <CardContent className="p-4">
+                      <div className="grid grid-cols-1 md:grid-cols-6 gap-4 items-center">
                         <div className="flex items-center gap-3">
-                          <div className={cn('p-2 rounded-lg', getStatusColor(status))}>
-                            <indicator.icon className="w-5 h-5" />
+                          <div className="p-3 rounded-xl bg-blue-100">
+                            <Waves className="w-5 h-5 text-blue-600" />
                           </div>
                           <div>
-                            <h3 className="font-medium text-gray-900 text-sm">{indicator.label}</h3>
-                            <p className="text-xs text-gray-500">{indicator.desc}</p>
+                            <p className="font-medium text-gray-900">{new Date(event.date).toLocaleDateString()}</p>
+                            <p className="text-sm text-gray-500">Scheduled Irrigation</p>
                           </div>
                         </div>
-                        <Badge variant={status === 'good' ? 'success' : status === 'warn' ? 'warning' : 'danger'} size="sm">
-                          {status.toUpperCase()}
-                        </Badge>
-                      </CardHeader>
-                      <CardContent className="pt-0">
-                        <div className="text-3xl font-bold text-gray-900 mb-2">
-                          {typeof value === 'number' ? value.toFixed(1) : value}
-                          <span className="text-lg font-normal text-gray-500 ml-1">{indicator.unit}</span>
+                        <div>
+                          <p className="text-sm text-gray-500">Amount</p>
+                          <p className="font-semibold text-gray-900">{event.amount_mm} mm</p>
                         </div>
-                        <div className="h-2 bg-gray-200 rounded-full overflow-hidden mb-2">
-                          <div
-                            className="h-full rounded-full transition-all"
-                            style={{
-                              width: `${Math.min(100, Math.max(0,
-                                indicator.key === 'et_fraction' ? (value as number) * 100 :
-                                indicator.key === 'ndvi_anomaly' ? ((value as number) + 0.5) * 100 :
-                                indicator.key === 'lst_anomaly' ? Math.max(0, 100 - (value as number) * 20) :
-                                indicator.key === 'precip_deficit' ? Math.max(0, 100 + (value as number) * 2) :
-                                (value as number)
-                              ))}%`,
-                              background: status === 'good' ? '#22c55e' : status === 'warn' ? '#eab308' : '#ef4444'
-                            }}
-                          />
+                        <div>
+                          <p className="text-sm text-gray-500">Method</p>
+                          <p className="font-medium text-gray-900 capitalize">{event.method}</p>
                         </div>
-                        <p className="text-xs text-gray-500 text-center">
-                          Good: {indicator.good} | Warn: {indicator.warn} | Critical: {indicator.critical}
-                        </p>
-                      </CardContent>
-                    </Card>
-                  )
-                })}
+                        <div>
+                          <p className="text-sm text-gray-500">Source</p>
+                          <p className="font-medium text-gray-900 capitalize">{event.source}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-gray-500">Efficiency</p>
+                          <p className="font-semibold text-gray-900">{Math.round(event.efficiency * 100)}%</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-gray-500">Cost</p>
+                          <p className="font-semibold text-gray-900">${event.cost.toFixed(2)}</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
               </div>
-            )}
-
-            {/* Composite Score */}
-            {selectedAlert && (
-              <Card className="mt-6 border-l-4 border-l-primary-500">
-                <CardHeader>
-                  <CardTitle>Composite Water Stress Index</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
-                    <div className="text-center md:col-span-1">
-                      <div className="relative inline-block">
-                        <svg className="w-32 h-32 transform -rotate-90">
-                          <circle cx="64" cy="64" r="58" fill="none" stroke="#e5e7eb" strokeWidth="10" />
-                          <circle
-                            cx="64" cy="64" r="58"
-                            fill="none"
-                            stroke="url(#stressGradient)"
-                            strokeWidth="10"
-                            strokeLinecap="round"
-                            strokeDasharray={`${(1 - (selectedAlert.indicators.et_fraction as number)) * 364.4} 364.4`}
-                          />
-                          <defs>
-                            <linearGradient id="stressGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                              <stop offset="0%" stopColor="#22c55e" />
-                              <stop offset="50%" stopColor="#eab308" />
-                              <stop offset="100%" stopColor="#ef4444" />
-                            </linearGradient>
-                          </defs>
-                        </svg>
-                        <div className="absolute inset-0 flex flex-col items-center justify-center">
-                          <span className="text-3xl font-bold text-gray-900">
-                            {Math.round((1 - (selectedAlert.indicators.et_fraction as number)) * 100)}
-                          </span>
-                          <span className="text-sm text-gray-500">WSI</span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="md:col-span-2 space-y-3">
-                      <p className="text-gray-700">
-                        The Water Stress Index (WSI) combines all indicators into a single 0-100 score.
-                        Current score indicates <strong className="text-gray-900">
-                          {selectedAlert.indicators.et_fraction < 0.4 ? 'severe stress' :
-                           selectedAlert.indicators.et_fraction < 0.7 ? 'moderate stress' : 'minimal stress'}
-                        </strong>.
-                      </p>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="p-4 rounded-lg bg-gray-50">
-                          <p className="text-sm text-gray-500">Contributing Factors</p>
-                          <div className="flex flex-wrap gap-1 mt-2">
-                            {Object.entries(selectedAlert.indicators).map(([key, value]) => {
-                              const status = getIndicatorStatus(key, value as number)
-                              if (status !== 'good') {
-                                const detail = indicatorDetails.find(d => d.key === key)
-                                return (
-                                  <Badge key={key} variant={status === 'warn' ? 'warning' : 'danger'} size="sm">
-                                    {detail?.label}
-                                  </Badge>
-                                )
-                              }
-                              return null
-                            })}
-                          </div>
-                        </div>
-                        <div className="p-4 rounded-lg bg-gray-50">
-                          <p className="text-sm text-gray-500">Recommended Action</p>
-                          <p className="text-sm font-medium text-gray-900 mt-1">{selectedAlert.recommendation.split('.')[0]}.</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+            ) : (
+              <Card>
+                <CardContent className="p-12 text-center">
+                  <Calendar className="w-12 h-12 mx-auto text-gray-300 mb-4" />
+                  <h3 className="text-lg font-semibold text-gray-900 mb-1">No Irrigation Schedule</h3>
+                  <p className="text-gray-500">Run water stress analysis to generate irrigation recommendations</p>
                 </CardContent>
               </Card>
             )}
           </div>
         </TabsContent>
 
-        <TabsContent value="forecast">
+        {/* ET Analysis Tab */}
+        <TabsContent value="et_data">
           <div className="mt-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Cloud className="w-5 h-5 text-blue-600" />
-                  7-Day Weather & Stress Forecast
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
+            <h3 className="text-lg font-semibold mb-4">Evapotranspiration Analysis</h3>
+            {results?.et_data && results.et_data.length > 0 ? (
+              <div className="space-y-4">
+                <div className="h-80 flex items-end justify-center gap-2 px-4">
+                  {results.et_data.slice(-30).map((d, i) => (
+                    <div key={i} className="flex-1 max-w-10 flex flex-col items-center">
+                      <div
+                        className="w-full bg-blue-500 rounded-t transition-all hover:bg-blue-600"
+                        style={{ height: `${Math.max(2, d.et_actual * 8)}px` }}
+                      />
+                      <div className="w-full bg-gray-200 rounded-t mt-1" style={{ height: `${Math.max(2, d.et_potential * 8)}px` }} />
+                      <span className="text-xs text-gray-500 mt-2">{new Date(d.date).toLocaleDateString()}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex items-center gap-4 text-sm text-gray-500">
+                  <div className="flex items-center gap-1">
+                    <div className="w-4 h-4 bg-blue-500 rounded" />
+                    <span>Actual ET</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <div className="w-4 h-4 bg-gray-300 rounded" />
+                    <span>Potential ET</span>
+                  </div>
+                </div>
+
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="text-left text-gray-500 border-b border-gray-200">
                         <th className="pb-3 font-medium">Date</th>
-                        <th className="pb-3 font-medium">High / Low</th>
-                        <th className="pb-3 font-medium">Precip</th>
-                        <th className="pb-3 font-medium">ET₀</th>
-                        <th className="pb-3 font-medium">SMAP SM Trend</th>
-                        <th className="pb-3 font-medium">Stress Risk</th>
-                        <th className="pb-3 font-medium">Action</th>
+                        <th className="pb-3 font-medium text-right">Actual ET (mm)</th>
+                        <th className="pb-3 font-medium text-right">Potential ET (mm)</th>
+                        <th className="pb-3 font-medium text-right">Stress Index</th>
+                        <th className="pb-3 font-medium text-right">Deficit (mm)</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {[
-                        { date: 'Today', high: 34, low: 18, precip: 0, et0: 6.2, sm_trend: -2, risk: 'Critical', action: 'Irrigate now' },
-                        { date: 'Tomorrow', high: 36, low: 20, precip: 0, et0: 6.8, sm_trend: -3, risk: 'Critical', action: 'Irrigate AM' },
-                        { date: 'Day 3', high: 35, low: 19, precip: 5, et0: 5.9, sm_trend: -1, risk: 'High', action: 'Monitor' },
-                        { date: 'Day 4', high: 32, low: 17, precip: 15, et0: 4.5, sm_trend: 3, risk: 'Moderate', action: 'Delay irrigation' },
-                        { date: 'Day 5', high: 29, low: 15, precip: 25, et0: 3.8, sm_trend: 8, risk: 'Low', action: 'None' },
-                        { date: 'Day 6', high: 28, low: 14, precip: 10, et0: 4.1, sm_trend: 5, risk: 'Low', action: 'None' },
-                        { date: 'Day 7', high: 30, low: 16, precip: 0, et0: 5.2, sm_trend: -1, risk: 'Moderate', action: 'Monitor' },
-                      ].map((day, i) => (
-                        <tr key={i} className="hover:bg-gray-50">
-                          <td className="py-3 font-medium">{day.date}</td>
-                          <td className="py-3">{day.high}° / {day.low}°</td>
-                          <td className="py-3">{day.precip} mm</td>
-                          <td className="py-3">{day.et0} mm</td>
-                          <td className="py-3">
-                            <span className={cn('font-medium', day.sm_trend > 0 ? 'text-green-600' : day.sm_trend < -2 ? 'text-red-600' : 'text-orange-600')}>
-                              {day.sm_trend > 0 ? '+' : ''}{day.sm_trend}%
-                            </span>
-                          </td>
-                          <td className="py-3">
-                            <Badge
-                              variant={
-                                day.risk === 'Critical' ? 'danger' :
-                                day.risk === 'High' ? 'warning' :
-                                day.risk === 'Moderate' ? 'info' : 'success'
-                              }
-                              size="sm"
-                            >
-                              {day.risk}
+                      {results.et_data.slice(-14).map((d, i) => (
+                        <tr key={i}>
+                          <td className="py-2">{new Date(d.date).toLocaleDateString()}</td>
+                          <td className="py-2 text-right font-medium text-blue-600">{d.et_actual.toFixed(2)}</td>
+                          <td className="py-2 text-right text-gray-900">{d.et_potential.toFixed(2)}</td>
+                          <td className="py-2 text-right">
+                            <Badge variant={d.stress_index > 0.7 ? 'danger' : d.stress_index > 0.4 ? 'warning' : 'success'} size="sm">
+                              {(d.stress_index * 100).toFixed(0)}%
                             </Badge>
                           </td>
-                          <td className="py-3 text-sm text-gray-600">{day.action}</td>
+                          <td className="py-2 text-right font-medium text-red-600">
+                            {(d.et_potential - d.et_actual).toFixed(2)}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            ) : (
+              <Card>
+                <CardContent className="p-12 text-center">
+                  <Sun className="w-12 h-12 mx-auto text-gray-300 mb-4" />
+                  <h3 className="text-lg font-semibold text-gray-900 mb-1">No ET Data</h3>
+                  <p className="text-gray-500">Run analysis to see evapotranspiration trends</p>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </TabsContent>
+
+        {/* Water Balance Tab */}
+        <TabsContent value="water_balance">
+          <div className="mt-4">
+            {waterBalance ? (
+              <>
+                <h3 className="text-lg font-semibold mb-4">Soil Water Balance</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                  <Card>
+                    <CardContent className="p-6">
+                      <h4 className="text-sm text-gray-500 mb-2">Field Capacity</h4>
+                      <p className="text-3xl font-bold text-blue-600">{waterBalance.field_capacity} mm</p>
+                      <p className="text-xs text-gray-400 mt-1">Maximum water soil can hold</p>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="p-6">
+                      <h4 className="text-sm text-gray-500 mb-2">Wilting Point</h4>
+                      <p className="text-3xl font-bold text-red-600">{waterBalance.wilting_point} mm</p>
+                      <p className="text-xs text-gray-400 mt-1">Plants can no longer extract water</p>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="p-6">
+                      <h4 className="text-sm text-gray-500 mb-2">Plant Available Water</h4>
+                      <p className="text-3xl font-bold text-green-600">{waterBalance.available_water.toFixed(1)} mm</p>
+                      <p className="text-xs text-gray-400 mt-1">Water available for crop uptake</p>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Current Status</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-4">
+                        <div>
+                          <div className="flex justify-between text-sm mb-1">
+                            <span>Current Soil Moisture</span>
+                            <span className="font-medium">{waterBalance.soil_moisture.toFixed(1)}%</span>
+                          </div>
+                          <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
+                            <div className="h-full bg-blue-500 rounded-full transition-all" style={{ width: `${Math.min(100, waterBalance.soil_moisture)}%` }} />
+                          </div>
+                        </div>
+                        <div>
+                          <div className="flex justify-between text-sm mb-1">
+                            <span>Water Used (ET / PET)</span>
+                            <span className="font-medium">{(waterBalance.current_et / waterBalance.potential_et * 100).toFixed(0)}%</span>
+                          </div>
+                          <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
+                            <div className="h-full bg-green-500 rounded-full transition-all" style={{ width: `${Math.min(100, waterBalance.current_et / waterBalance.potential_et * 100)}%` }} />
+                          </div>
+                        </div>
+                        <div className="p-4 rounded-lg bg-gray-50">
+                          <p className="text-sm text-gray-600 mb-1">
+                            <strong>Days until water stress:</strong> {waterBalance.days_to_stress} days
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            Based on current ET rate of {waterBalance.current_et} mm/day and {waterBalance.available_water.toFixed(1)} mm available water
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Soil Moisture Trend</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="h-48 flex items-end justify-center gap-2 px-4">
+                        {results.et_data?.slice(-14).map((d, i) => (
+                          <div key={i} className="flex-1 max-w-10 flex flex-col items-center">
+                            <div
+                              className="w-full bg-green-500 rounded-t transition-all hover:bg-green-600"
+                              style={{ height: `${Math.max(2, (100 - d.stress_index * 100))}px` }}
+                            />
+                            <span className="text-xs text-gray-500 mt-2">{new Date(d.date).toLocaleDateString()}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="text-center text-sm text-gray-500 mt-3">Estimated soil moisture % (inverted stress index)</p>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Model Performance</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {results.model_performance && [
+                        { label: 'ET Accuracy', value: (results.model_performance.et_accuracy * 100).toFixed(1) + '%', desc: 'Evapotranspiration prediction accuracy' },
+                        { label: 'Stress Detection F1', value: (results.model_performance.stress_detection_f1 * 100).toFixed(1) + '%', desc: 'Water stress classification F1 score' },
+                      ].map((m) => (
+                        <div key={m.label} className="p-4 rounded-lg bg-gray-50">
+                          <p className="text-2xl font-bold text-primary-600">{m.value}</p>
+                          <p className="text-sm text-gray-500 mt-1">{m.label}</p>
+                          <p className="text-xs text-gray-400 mt-1">{m.desc}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              </>
+            ) : (
+              <Card>
+                <CardContent className="p-12 text-center">
+                  <Droplet className="w-12 h-12 mx-auto text-gray-300 mb-4" />
+                  <h3 className="text-lg font-semibold text-gray-900 mb-1">No Water Balance Data</h3>
+                  <p className="text-gray-500">Run analysis to see soil water balance metrics</p>
+                </CardContent>
+              </Card>
+            )}
           </div>
         </TabsContent>
       </Tabs>

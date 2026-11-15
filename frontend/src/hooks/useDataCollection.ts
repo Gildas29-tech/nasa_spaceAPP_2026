@@ -3,19 +3,27 @@
  * Connects frontend to backend data collection endpoints.
  */
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '../lib/api';
+import { useQuery, useMutation, useQueryClient, UseQueryResult } from '@tanstack/react-query';
+import { api, type FarmResponse, type DataCollectionResponse as ApiDataCollectionResponse, type CollectionStatus as ApiCollectionStatus, type CollectionSummary as ApiCollectionSummary, type CollectionResult as ApiCollectionResult } from '../lib/api';
+import { useFarmStore } from '../stores/farmStore';
+import { useUIStore } from '../stores/uiStore';
 
 // Types
 export interface Farm {
   id: string;
   name: string;
+  crop?: string;
+  area?: string;
+  location?: string;
+  soilType?: string;
   geometry: GeoJSON.Geometry;
-  centroid: { latitude: number; longitude: number };
+  centroid: { lat: number; lon: number };
   description?: string;
   crops_of_interest?: string[];
-  created_at: string;
-  updated_at: string;
+  createdAt: string;
+  updatedAt: string;
+  dataStatus?: 'pending' | 'collecting' | 'completed' | 'failed';
+  lastCollectionAt?: string;
 }
 
 export interface DataSource {
@@ -41,92 +49,48 @@ export interface DataCollectionRequest {
   crops_of_interest?: string[];
 }
 
-export interface DataCollectionResponse {
-  collection_id: string;
-  farm_id: string;
-  farm_name: string;
-  period_start: string;
-  period_end: string;
-  status: string;
-  message: string;
-}
+// Re-export API types with consistent naming
+export type DataCollectionResponse = ApiDataCollectionResponse;
+export type CollectionStatus = ApiCollectionStatus;
+export type CollectionSummary = ApiCollectionSummary;
+export type CollectionResult = ApiCollectionResult;
 
-export interface CollectionStatus {
-  collection_id: string;
-  farm_id: string;
-  farm_name: string;
-  period: { start: string; end: string };
-  overall_status: string;
-  sources: Record<string, {
-    source: string;
-    status: string;
-    has_data: boolean;
-    error: string | null;
-  }>;
-  summary: {
-    total_sources: number;
-    successful: number;
-    failed: number;
-    unavailable: number;
-  };
-  collected_at: string;
-}
-
-export interface CollectionSummary {
-  collection_id: string;
-  farm_name: string;
-  period: { start: string; end: string };
-  data_availability: Record<string, string>;
-  key_metrics: {
-    climate?: {
-      avg_temp_c?: number;
-      total_precip_mm?: number;
-      avg_humidity?: number;
-      avg_radiation_mj_m2?: number;
-    };
-    vegetation?: {
-      latest_acquisition?: string;
-      cloud_cover?: number;
-    };
-    precipitation?: { source: string; note: string };
-    soil_moisture?: { source: string; note: string };
-    landsat?: {
-      latest_acquisition?: string;
-      cloud_cover?: number;
-    };
-    crop_suitability?: { top_crops: string[]; note: string };
+function mapFarmResponse(farm: FarmResponse): Farm {
+  return {
+    id: farm.id,
+    name: farm.name,
+    crop: farm.crops_of_interest?.[0],
+    area: 'Unknown',
+    location: farm.description,
+    geometry: farm.geometry,
+    centroid: farm.centroid,
+    description: farm.description,
+    crops_of_interest: farm.crops_of_interest,
+    createdAt: farm.created_at,
+    updatedAt: farm.updated_at,
+    dataStatus: 'pending',
   };
 }
 
-export interface CollectionResult {
-  farm_id: string;
-  farm_name: string;
-  geometry: GeoJSON.Geometry;
-  period: { start: string; end: string };
-  sources: Record<string, {
-    source: string;
-    status: string;
-    data: any;
-    error: string | null;
-    metadata: Record<string, any>;
-    collected_at: string;
-  }>;
-  summary: {
-    total_sources: number;
-    successful: number;
-    failed: number;
-    unavailable: number;
-  };
-  collected_at: string;
-}
+// Type guards for status checking
+export const isCollectionComplete = (status: string): boolean =>
+  ['completed', 'partial_failure', 'completed_with_gaps'].includes(status);
 
-// API functions
+export const isCollectionRunning = (status: string): boolean =>
+  ['started', 'running', 'processing'].includes(status);
+
+// API functions - using correct backend paths (baseURL already includes /api/v1)
 const dataApi = {
   // Farms
-  listFarms: () => api.get<Farm[]>('/data/farms'),
-  getFarm: (id: string) => api.get<Farm>(`/data/farms/${id}`),
-  createFarm: (farm: Omit<Farm, 'id' | 'created_at' | 'updated_at'>) =>
-    api.post<Farm>('/data/farms', farm),
+  listFarms: () => api.get<FarmResponse[]>('/data/farms'),
+  getFarm: (id: string) => api.get<FarmResponse>(`/data/farms/${id}`),
+  createFarm: (farm: Omit<Farm, 'id' | 'createdAt' | 'updatedAt' | 'crop' | 'area' | 'location' | 'crops_of_interest' | 'description'> & {
+    geometry: GeoJSON.Geometry;
+    centroid: { lat: number; lon: number };
+    crops_of_interest?: string[];
+    description?: string;
+  }) =>
+    api.post<FarmResponse>('/data/farms', farm),
   deleteFarm: (id: string) => api.delete(`/data/farms/${id}`),
 
   // Data Sources
@@ -140,43 +104,72 @@ const dataApi = {
   getCollectionSummary: (id: string) => api.get<CollectionSummary>(`/data/collect/${id}/summary`),
 };
 
-// Hooks
-
-export function useFarms() {
+/**
+ * Hook that syncs farms from backend to local store.
+ * Use this on app initialization or when farms might have changed externally.
+ */
+export function useSyncFarms() {
   return useQuery({
-    queryKey: ['farms'],
-    queryFn: dataApi.listFarms,
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    queryKey: ['farms', 'sync'],
+    queryFn: async () => {
+      return await dataApi.listFarms();
+    },
+    staleTime: 0, // Always fetch fresh on mount
   });
 }
 
-export function useFarm(id: string) {
-  return useQuery({
-    queryKey: ['farm', id],
-    queryFn: () => dataApi.getFarm(id),
-    enabled: !!id,
-    staleTime: 5 * 60 * 1000,
-  });
-}
-
-export function useCreateFarm() {
+/**
+ * Hook to create a farm and sync with both backend and local store.
+ */
+export function useCreateFarmWithStore() {
   const queryClient = useQueryClient();
+  const createFarmFromAPI = useFarmStore(state => state.createFarmFromAPI);
+  const { addToast } = useUIStore();
+
+  // Input type for creating a farm (what the user provides)
+  type CreateFarmInput = Omit<Farm, 'id' | 'createdAt' | 'updatedAt' | 'crop' | 'area' | 'location' | 'crops_of_interest' | 'description'> & {
+    geometry: GeoJSON.Geometry;
+    centroid: { lat: number; lon: number };
+    crops_of_interest?: string[];
+    description?: string;
+  };
 
   return useMutation({
-    mutationFn: dataApi.createFarm,
-    onSuccess: () => {
+    mutationFn: async (data: CreateFarmInput) => {
+      return await dataApi.createFarm(data);
+    },
+    onSuccess: (newFarmResponse) => {
+      const newFarm = mapFarmResponse(newFarmResponse);
+      createFarmFromAPI(newFarm);
       queryClient.invalidateQueries({ queryKey: ['farms'] });
+      addToast({ type: 'success', title: 'Farm created', message: `${newFarm.name} has been added` });
+    },
+    onError: (error: any) => {
+      addToast({ type: 'error', title: 'Failed to create farm', message: error.message });
     },
   });
 }
 
-export function useDeleteFarm() {
+/**
+ * Hook to delete a farm from both backend and local store.
+ */
+export function useDeleteFarmWithStore() {
   const queryClient = useQueryClient();
+  const deleteFarmStore = useFarmStore(state => state.deleteFarm);
+  const { addToast } = useUIStore();
 
   return useMutation({
-    mutationFn: dataApi.deleteFarm,
-    onSuccess: () => {
+    mutationFn: async (id: string) => {
+      await dataApi.deleteFarm(id);
+      return id;
+    },
+    onSuccess: (id) => {
+      deleteFarmStore(id);
       queryClient.invalidateQueries({ queryKey: ['farms'] });
+      addToast({ type: 'success', title: 'Farm deleted' });
+    },
+    onError: (error: any) => {
+      addToast({ type: 'error', title: 'Failed to delete farm', message: error.message });
     },
   });
 }
@@ -195,10 +188,7 @@ export function useTriggerCollection() {
   return useMutation({
     mutationFn: dataApi.triggerCollection,
     onSuccess: (data) => {
-      // Invalidate collections list if we have one
       queryClient.invalidateQueries({ queryKey: ['collections'] });
-      // Optionally start polling for status
-      return data;
     },
   });
 }
@@ -209,12 +199,11 @@ export function useCollectionStatus(collectionId: string, enabled = true) {
     queryFn: () => dataApi.getCollectionStatus(collectionId),
     enabled: enabled && !!collectionId,
     refetchInterval: (query) => {
-      // Poll every 5 seconds while status is not final
       const status = query.state.data?.overall_status;
-      if (status === 'completed' || status === 'partial_failure' || status === 'completed_with_gaps') {
-        return false; // Stop polling
+      if (isCollectionComplete(status || '')) {
+        return false;
       }
-      return 5000; // Poll every 5 seconds
+      return 5000;
     },
     staleTime: 0,
   });
@@ -238,13 +227,19 @@ export function useCollectionSummary(collectionId: string, enabled = true) {
   });
 }
 
-// Combined hook for full collection workflow
-export function useDataCollection(farmId: string | null) {
+/**
+ * Hook for managing a farm's data collection workflow.
+ * Returns the selected farm (if farmId provided) and a function to trigger collection.
+ */
+export function useFarmDataCollection(farmId: string | null) {
   const queryClient = useQueryClient();
   const triggerCollection = useTriggerCollection();
-  const farms = useFarms();
 
-  const startCollection = async (startDate: string, endDate: string, cropsOfInterest?: string[]) => {
+  const startCollection = async (
+    startDate: string,
+    endDate: string,
+    cropsOfInterest?: string[]
+  ): Promise<string> => {
     if (!farmId) throw new Error('No farm selected');
 
     const result = await triggerCollection.mutateAsync({
@@ -254,37 +249,139 @@ export function useDataCollection(farmId: string | null) {
       crops_of_interest: cropsOfInterest,
     });
 
-    // Return collection ID for polling
     return result.collection_id;
   };
 
   return {
-    farms: farms.data || [],
-    farmsLoading: farms.isLoading,
     triggerCollection: startCollection,
     triggerLoading: triggerCollection.isPending,
     triggerError: triggerCollection.error,
+    isTriggering: triggerCollection.isPending,
   };
 }
 
-// Hook for polling collection until complete
+/**
+ * Hook that handles the complete collection workflow:
+ * 1. Trigger collection
+ * 2. Poll status until complete
+ * 3. Return summary when done
+ */
+export function useCollectionWorkflow() {
+  const queryClient = useQueryClient();
+  const triggerCollection = useTriggerCollection();
+
+  const executeCollection = async (
+    farmId: string,
+    startDate: string,
+    endDate: string,
+    cropsOfInterest?: string[]
+  ) => {
+    if (!farmId) throw new Error('No farm selected');
+
+    // Step 1: Trigger collection
+    const result = await triggerCollection.mutateAsync({
+      farm_id: farmId,
+      start_date: startDate,
+      end_date: endDate,
+      crops_of_interest: cropsOfInterest,
+    });
+
+    const collectionId = result.collection_id;
+
+    // Step 2: Poll for completion
+    let status: CollectionStatus | null = null;
+    let attempts = 0;
+    const maxAttempts = 120; // 10 minutes at 5s intervals
+
+    while (attempts < maxAttempts) {
+      await new Promise(resolve => setTimeout(resolve, 5000));
+
+      try {
+        status = await dataApi.getCollectionStatus(collectionId);
+        if (isCollectionComplete(status.overall_status)) {
+          break;
+        }
+      } catch (error) {
+        console.error('Error polling collection status:', error);
+      }
+
+      attempts++;
+    }
+
+    if (!status || !isCollectionComplete(status.overall_status)) {
+      throw new Error('Collection timed out or failed to complete');
+    }
+
+    // Step 3: Fetch summary
+    const summary = await dataApi.getCollectionSummary(collectionId);
+
+    // Invalidate related queries
+    queryClient.invalidateQueries({ queryKey: ['farms'] });
+
+    return { collectionId, status, summary };
+  };
+
+  return {
+    executeCollection,
+    isExecuting: triggerCollection.isPending,
+    error: triggerCollection.error,
+  };
+}
+
+// Hook for polling collection until complete (for UI components)
 export function useCollectionPolling(collectionId: string | null) {
   const statusQuery = useCollectionStatus(collectionId || '', !!collectionId);
   const summaryQuery = useCollectionSummary(collectionId || '', !!collectionId);
 
-  const isComplete = statusQuery.data?.overall_status === 'completed' ||
-                     statusQuery.data?.overall_status === 'partial_failure' ||
-                     statusQuery.data?.overall_status === 'completed_with_gaps';
+  const isComplete = statusQuery.data ? isCollectionComplete(statusQuery.data.overall_status) : false;
+  const isRunning = statusQuery.data ? isCollectionRunning(statusQuery.data.overall_status) : false;
 
   return {
     status: statusQuery.data,
     summary: summaryQuery.data,
     isLoading: statusQuery.isLoading || summaryQuery.isLoading,
     isComplete,
+    isRunning,
     error: statusQuery.error || summaryQuery.error,
     refetch: () => {
       statusQuery.refetch();
       summaryQuery.refetch();
     },
+  };
+}
+
+/**
+ * Hook to get data source availability for a collection
+ */
+export function useDataSourceAvailability(collectionId: string | null) {
+  const { status } = useCollectionPolling(collectionId);
+
+  const availability = status?.sources ?
+    Object.entries(status.sources).reduce((acc, [key, source]) => {
+      acc[key] = source.status;
+      return acc;
+    }, {} as Record<string, string>) :
+    {};
+
+  const availableSources = status?.sources ?
+    Object.entries(status.sources)
+      .filter(([, source]) => source.status === 'success')
+      .map(([key]) => key) :
+    [];
+
+  const failedSources = status?.sources ?
+    Object.entries(status.sources)
+      .filter(([, source]) => source.status === 'failed')
+      .map(([key, source]) => ({ source: key, error: source.error })) :
+    [];
+
+  return {
+    availability,
+    availableSources,
+    failedSources,
+    totalSources: status?.summary?.total_sources || 0,
+    successfulCount: status?.summary?.successful || 0,
+    failedCount: status?.summary?.failed || 0,
+    unavailableCount: status?.summary?.unavailable || 0,
   };
 }

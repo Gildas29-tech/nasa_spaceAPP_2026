@@ -1,7 +1,7 @@
 """OpenET service for field-scale evapotranspiration data."""
 
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Union
 
 import httpx

@@ -50,6 +50,8 @@ class NASADataResult(BaseModel):
     source: str = "earthaccess"
     crs: str = "EPSG:4326"
 
+    model_config = {"arbitrary_types_allowed": True}
+
 
 class NASAEarthdataBase(ABC):
     """Base class for all NASA Earthdata services."""

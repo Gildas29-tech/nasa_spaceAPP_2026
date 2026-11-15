@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { cn } from '../lib/utils'
 import {
@@ -6,6 +6,7 @@ import {
   GitBranch,
   TrendingUp,
   AlertTriangle,
+  AlertCircle,
   Map,
   Settings,
   ArrowRight,
@@ -16,10 +17,20 @@ import {
   Sun,
   Droplet,
   BarChart3,
+  Plus,
+  Download,
+  MapPin,
+  RefreshCw,
+  Loader2,
 } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
 import { Badge } from '../components/ui/Badge'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '../components/ui/Tabs'
+import { useFarmStore } from '../stores/farmStore'
+import { useUIStore } from '../stores/uiStore'
+import { api } from '../lib/api'
+import { formatDate } from '../lib/utils'
 
 const quickActions = [
   {
@@ -72,30 +83,133 @@ const quickActions = [
   },
 ]
 
-const stats = [
-  { label: 'Fields Monitored', value: '12', icon: Map, color: 'text-blue-600', trend: '+2 this month' },
-  { label: 'Soil Health Score', value: '78', icon: Leaf, color: 'text-green-600', trend: '+5 vs last season' },
-  { label: 'Water Stress Alerts', value: '3', icon: AlertTriangle, color: 'text-orange-600', trend: '1 critical' },
-  { label: 'Yield Predictions', value: '24', icon: TrendingUpIcon, color: 'text-purple-600', trend: '87% accuracy' },
-]
-
-const recentActivity = [
-  { action: 'Soil health analysis completed', field: 'North Field 1', time: '2 hours ago', type: 'success' },
-  { action: 'Water stress alert triggered', field: 'South Field 3', time: '5 hours ago', type: 'warning' },
-  { action: 'Rotation plan generated', field: 'East Field 2', time: '1 day ago', type: 'info' },
-  { action: 'Yield prediction updated', field: 'West Field 1', time: '2 days ago', type: 'success' },
-  { action: 'New field added', field: 'Central Field 4', time: '3 days ago', type: 'info' },
-]
-
-const weatherData = [
-  { label: 'Temperature', value: '24°C', icon: Sun, unit: 'Feels like 26°C', color: 'text-orange-600' },
-  { label: 'Humidity', value: '65%', icon: Droplet, unit: 'Dew point 17°C', color: 'text-blue-600' },
-  { label: 'Precipitation (7d)', value: '12mm', icon: Cloud, unit: '30% below normal', color: 'text-green-600' },
-  { label: 'Soil Moisture', value: '0.28 m³/m³', icon: Droplet, unit: '45th percentile', color: 'text-cyan-600' },
-]
-
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState('overview')
+  const { farms, loading: farmsLoading, fetchFarms } = useFarmStore()
+  const { addToast } = useUIStore()
+  const [weather, setWeather] = useState<{
+    temperature?: string
+    humidity?: string
+    precipitation?: string
+    soilMoisture?: string
+    loading: boolean
+    error?: string
+  }>({ loading: true })
+  const [recentCollections, setRecentCollections] = useState<Array<{
+    id: string
+    farmName: string
+    status: string
+    createdAt: string
+  }>>([])
+  const [stats, setStats] = useState({
+    totalFarms: 0,
+    avgSoilHealth: 0,
+    activeAlerts: 0,
+    totalPredictions: 0,
+  })
+
+  // Fetch farms on mount
+  useEffect(() => {
+    fetchFarms()
+  }, [fetchFarms])
+
+  // Fetch weather data for first farm
+  useEffect(() => {
+    if (farms.length > 0) {
+      fetchWeatherForFarm(farms[0])
+    }
+  }, [farms])
+
+  // Fetch recent collections
+  useEffect(() => {
+    fetchRecentCollections()
+  }, [])
+
+  // Update stats when farms change
+  useEffect(() => {
+    setStats({
+      totalFarms: farms.length,
+      avgSoilHealth: farms.length > 0
+        ? Math.round(farms.reduce((sum, f) => sum + (f.dataStatus === 'completed' ? 85 : 50), 0) / farms.length)
+        : 0,
+      activeAlerts: 0, // Would come from alerts API
+      totalPredictions: 0, // Would come from predictions API
+    })
+  }, [farms])
+
+  interface WeatherData {
+  temperature?: number
+  humidity?: number
+  precipitation?: number
+  soilMoisture?: number
+}
+
+interface RecentCollection {
+  id: string
+  farmName: string
+  status: string
+  createdAt: string
+}
+
+const fetchWeatherForFarm = async (farm: { centroid: { lat: number; lon: number } }) => {
+    setWeather({ loading: true })
+    try {
+      // Use NASA POWER API via backend
+      const data = await api.get<WeatherData>('/api/v1/data/weather', {
+        params: {
+          lat: farm.centroid.lat,
+          lon: farm.centroid.lon,
+        }
+      })
+      if (data && data.temperature !== undefined) {
+        setWeather({
+          loading: false,
+          temperature: `${data.temperature?.toFixed(1)}°C`,
+          humidity: `${data.humidity?.toFixed(0)}%`,
+          precipitation: `${data.precipitation?.toFixed(1)}mm`,
+          soilMoisture: `${data.soilMoisture?.toFixed(3)} m³/m³`,
+        })
+      } else {
+        setWeather({ loading: false, error: 'No weather data available' })
+      }
+    } catch (error) {
+      setWeather({ loading: false, error: 'Failed to fetch weather' })
+    }
+  }
+
+  const fetchRecentCollections = async () => {
+    try {
+      const data = await api.get<RecentCollection[]>('/api/v1/data/collections/recent', { params: { limit: 5 } })
+      if (Array.isArray(data)) {
+        setRecentCollections(data)
+      }
+    } catch (error) {
+      console.error('Failed to fetch recent collections:', error)
+    }
+  }
+
+  const handleAddField = () => {
+    // Navigate to field map to create a new farm
+    window.location.href = '/field-map'
+  }
+
+  const getStatusIcon = (type: string) => {
+    switch (type) {
+      case 'success': return <CheckCircle className="w-5 h-5" />
+      case 'warning': return <AlertTriangle className="w-5 h-5" />
+      case 'info': return <BarChart3 className="w-5 h-5" />
+      default: return <BarChart3 className="w-5 h-5" />
+    }
+  }
+
+  const getStatusColor = (type: string) => {
+    switch (type) {
+      case 'success': return 'bg-green-100 text-green-600'
+      case 'warning': return 'bg-orange-100 text-orange-600'
+      case 'info': return 'bg-blue-100 text-blue-600'
+      default: return 'bg-gray-100 text-gray-600'
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -106,11 +220,11 @@ export default function Dashboard() {
           <p className="text-gray-500 mt-1">Overview of your fields and NASA Earth observation insights</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="secondary" size="sm">
+          <Button variant="secondary" size="sm" onClick={() => { addToast({ type: 'info', title: 'Export Report', message: 'Report generation coming soon' }) }}>
             <Download className="w-4 h-4 mr-2" />
             Export Report
           </Button>
-          <Button size="sm">
+          <Button size="sm" onClick={handleAddField}>
             <Plus className="w-4 h-4 mr-2" />
             Add Field
           </Button>
@@ -119,22 +233,62 @@ export default function Dashboard() {
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {stats.map((stat) => (
-          <Card key={stat.label} className="hover:shadow-md transition-shadow">
-            <CardContent className="p-6">
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-500">{stat.label}</p>
-                  <p className="text-3xl font-bold text-gray-900 mt-1">{stat.value}</p>
-                  <p className="text-sm text-gray-500 mt-2">{stat.trend}</p>
-                </div>
-                <div className={cn('p-3 rounded-xl', stat.color.replace('text-', 'bg-').replace('600', '100'))}>
-                  <stat.icon className={cn('w-6 h-6', stat.color)} />
-                </div>
+        <Card className="hover:shadow-md transition-shadow">
+          <CardContent className="p-6">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-500">Fields Monitored</p>
+                <p className="text-3xl font-bold text-gray-900 mt-1">{stats.totalFarms}</p>
+                <p className="text-sm text-gray-500 mt-2">{stats.totalFarms > 0 ? 'Active' : 'No fields yet'}</p>
               </div>
-            </CardContent>
-          </Card>
-        ))}
+              <div className="p-3 rounded-xl bg-blue-100">
+                <Map className="w-6 h-6 text-blue-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="hover:shadow-md transition-shadow">
+          <CardContent className="p-6">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-500">Avg Soil Health</p>
+                <p className="text-3xl font-bold text-gray-900 mt-1">{stats.avgSoilHealth}</p>
+                <p className="text-sm text-gray-500 mt-2">{farms.some(f => f.dataStatus === 'completed') ? 'From NASA data' : 'Collect data first'}</p>
+              </div>
+              <div className="p-3 rounded-xl bg-green-100">
+                <Leaf className="w-6 h-6 text-green-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="hover:shadow-md transition-shadow">
+          <CardContent className="p-6">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-500">Active Alerts</p>
+                <p className="text-3xl font-bold text-gray-900 mt-1">{stats.activeAlerts}</p>
+                <p className="text-sm text-gray-500 mt-2">Check Monitoring tab</p>
+              </div>
+              <div className="p-3 rounded-xl bg-orange-100">
+                <AlertTriangle className="w-6 h-6 text-orange-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="hover:shadow-md transition-shadow">
+          <CardContent className="p-6">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-500">Total Predictions</p>
+                <p className="text-3xl font-bold text-gray-900 mt-1">{stats.totalPredictions}</p>
+                <p className="text-sm text-gray-500 mt-2">Run Yield Predictor</p>
+              </div>
+              <div className="p-3 rounded-xl bg-purple-100">
+                <TrendingUpIcon className="w-6 h-6 text-purple-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Main Content Tabs */}
@@ -191,18 +345,64 @@ export default function Dashboard() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="grid grid-cols-2 gap-4">
-                    {weatherData.map((w) => (
-                      <div key={w.label} className="p-4 rounded-lg bg-gray-50">
-                        <div className="flex items-center gap-2 mb-2">
-                          <w.icon className={cn('w-5 h-5', w.color || 'text-gray-600')} />
-                          <span className="text-sm text-gray-500">{w.label}</span>
+                  {weather.loading ? (
+                    <div className="grid grid-cols-2 gap-4">
+                      {[1,2,3,4].map(i => (
+                        <div key={i} className="p-4 rounded-lg bg-gray-50 animate-pulse">
+                          <div className="h-4 bg-gray-200 rounded w-1/2 mb-2"></div>
+                          <div className="h-8 bg-gray-200 rounded"></div>
                         </div>
-                        <p className="text-2xl font-bold text-gray-900">{w.value}</p>
-                        <p className="text-xs text-gray-500 mt-1">{w.unit}</p>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  ) : weather.error ? (
+                    <div className="p-4 text-center text-gray-500">
+                      <AlertCircle className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+                      <p>{weather.error}</p>
+                      <Button variant="ghost" size="sm" className="mt-2" onClick={() => farms.length > 0 && fetchWeatherForFarm(farms[0])}>
+                        <RefreshCw className="w-4 h-4 mr-1" />
+                        Retry
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-4">
+                      {weather.temperature && (
+                        <div className="p-4 rounded-lg bg-gray-50">
+                          <div className="flex items-center gap-2 mb-2">
+                            <Sun className="w-5 h-5 text-orange-600" />
+                            <span className="text-sm text-gray-500">Temperature</span>
+                          </div>
+                          <p className="text-2xl font-bold text-gray-900">{weather.temperature}</p>
+                        </div>
+                      )}
+                      {weather.humidity && (
+                        <div className="p-4 rounded-lg bg-gray-50">
+                          <div className="flex items-center gap-2 mb-2">
+                            <Droplet className="w-5 h-5 text-blue-600" />
+                            <span className="text-sm text-gray-500">Humidity</span>
+                          </div>
+                          <p className="text-2xl font-bold text-gray-900">{weather.humidity}</p>
+                        </div>
+                      )}
+                      {weather.precipitation && (
+                        <div className="p-4 rounded-lg bg-gray-50">
+                          <div className="flex items-center gap-2 mb-2">
+                            <Cloud className="w-5 h-5 text-green-600" />
+                            <span className="text-sm text-gray-500">Precipitation (7d)</span>
+                          </div>
+                          <p className="text-2xl font-bold text-gray-900">{weather.precipitation}</p>
+                        </div>
+                      )}
+                      {weather.soilMoisture && (
+                        <div className="p-4 rounded-lg bg-gray-50">
+                          <div className="flex items-center gap-2 mb-2">
+                            <Droplet className="w-5 h-5 text-cyan-600" />
+                            <span className="text-sm text-gray-500">Soil Moisture</span>
+                          </div>
+                          <p className="text-2xl font-bold text-gray-900">{weather.soilMoisture}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 
@@ -210,35 +410,44 @@ export default function Dashboard() {
                 <CardHeader className="flex flex-row items-center justify-between">
                   <CardTitle className="flex items-center gap-2">
                     <Clock className="w-5 h-5 text-gray-600" />
-                    Recent Activity
+                    Recent Collections
                   </CardTitle>
+                  <Button variant="ghost" size="sm" onClick={fetchRecentCollections} disabled={recentCollections.length > 0 && false}>
+                    <RefreshCw className="w-4 h-4 mr-1" />
+                    Refresh
+                  </Button>
                 </CardHeader>
                 <CardContent className="p-0">
-                  <div className="divide-y divide-gray-100">
-                    {recentActivity.map((activity, i) => (
-                      <div
-                        key={i}
-                        className="p-4 hover:bg-gray-50 flex items-center gap-4"
-                      >
+                  {recentCollections.length === 0 ? (
+                    <div className="p-6 text-center text-gray-500">
+                      <BarChart3 className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                      <p>No recent data collections</p>
+                      <p className="text-sm mt-1">Create a farm and collect data to see activity here</p>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-gray-100">
+                      {recentCollections.map((collection) => (
                         <div
-                          className={cn(
-                            'p-2 rounded-full',
-                            activity.type === 'success' && 'bg-green-100 text-green-600',
-                            activity.type === 'warning' && 'bg-orange-100 text-orange-600',
-                            activity.type === 'info' && 'bg-blue-100 text-blue-600'
-                          )}
+                          key={collection.id}
+                          className="p-4 hover:bg-gray-50 flex items-center gap-4"
                         >
-                          {activity.type === 'success' && <CheckCircle className="w-5 h-5" />}
-                          {activity.type === 'warning' && <AlertTriangle className="w-5 h-5" />}
-                          {activity.type === 'info' && <BarChart3 className="w-5 h-5" />}
+                          <div className={cn('p-2 rounded-full',
+                            collection.status === 'completed' ? 'bg-green-100 text-green-600' :
+                            collection.status === 'partial_failure' ? 'bg-orange-100 text-orange-600' :
+                            'bg-blue-100 text-blue-600'
+                          )}>
+                            {collection.status === 'completed' && <CheckCircle className="w-5 h-5" />}
+                            {collection.status === 'partial_failure' && <AlertTriangle className="w-5 h-5" />}
+                            {(collection.status !== 'completed' && collection.status !== 'partial_failure') && <Loader2 className="w-5 h-5 animate-spin" />}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-900">Data collection for {collection.farmName}</p>
+                            <p className="text-xs text-gray-500">Status: {collection.status} • {formatDate(collection.createdAt)}</p>
+                          </div>
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-900">{activity.action}</p>
-                          <p className="text-xs text-gray-500">{activity.field} • {activity.time}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </div>
@@ -249,113 +458,118 @@ export default function Dashboard() {
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold text-gray-900">Your Fields</h2>
-              <Button size="sm">
+              <Button size="sm" onClick={handleAddField}>
                 <Plus className="w-4 h-4 mr-2" />
                 Add Field
               </Button>
             </div>
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {[
-                { name: 'North Field 1', crop: 'Corn', area: '45 ha', health: 82, status: 'Good' },
-                { name: 'South Field 3', crop: 'Soybean', area: '32 ha', health: 78, status: 'Warning' },
-                { name: 'East Field 2', crop: 'Wheat', area: '28 ha', health: 85, status: 'Good' },
-                { name: 'West Field 1', crop: 'Corn', area: '52 ha', health: 72, status: 'Attention' },
-                { name: 'Central Field 4', crop: 'Alfalfa', area: '18 ha', health: 90, status: 'Excellent' },
-              ].map((field, i) => (
-                <Card key={i} className="hover:shadow-md transition-shadow">
-                  <CardContent className="p-6">
-                    <div className="flex items-start justify-between mb-4">
-                      <div>
-                        <h3 className="font-semibold text-gray-900">{field.name}</h3>
-                        <p className="text-sm text-gray-500">{field.crop} • {field.area}</p>
+            {farmsLoading ? (
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {[1,2,3].map(i => (
+                  <Card key={i} className="animate-pulse">
+                    <CardContent className="p-6">
+                      <div className="flex items-start justify-between mb-4">
+                        <div>
+                          <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
+                          <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+                        </div>
+                        <div className="h-5 bg-gray-200 rounded w-20"></div>
                       </div>
-                      <Badge
-                        variant={
-                          field.status === 'Excellent' ? 'success' :
-                          field.status === 'Good' ? 'success' :
-                          field.status === 'Warning' ? 'warning' : 'danger'
-                        }
-                      >
-                        {field.status}
-                      </Badge>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Leaf className="w-5 h-5 text-green-600" />
-                        <span className="text-sm text-gray-600">Soil Health</span>
+                      <div className="h-2 bg-gray-200 rounded-full mb-3"></div>
+                      <div className="h-8 bg-gray-200 rounded-full"></div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            ) : farms.length === 0 ? (
+              <Card>
+                <CardContent className="p-12 text-center">
+                  <MapPin className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">No fields yet</h3>
+                  <p className="text-gray-500 mb-4">Create your first field to start monitoring with NASA Earth observation data</p>
+                  <Button onClick={handleAddField}>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Create Field on Map
+                  </Button>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {farms.map((farm) => (
+                  <Card key={farm.id} className="hover:shadow-md transition-shadow">
+                    <CardContent className="p-6">
+                      <div className="flex items-start justify-between mb-4">
+                        <div>
+                          <h3 className="font-semibold text-gray-900">{farm.name}</h3>
+                          <p className="text-sm text-gray-500">
+                            {farm.crop || 'No crop'} • {farm.area || 'Unknown area'}
+                          </p>
+                          <p className="text-xs text-gray-400 mt-1">
+                            <MapPin className="w-3 h-3 inline mr-1" />
+                            ({farm.centroid?.lat.toFixed(2)}, {farm.centroid?.lon.toFixed(2)})
+                          </p>
+                        </div>
+                        <Badge
+                          variant={
+                            farm.dataStatus === 'completed' ? 'success' :
+                            farm.dataStatus === 'collecting' ? 'info' :
+                            farm.dataStatus === 'failed' ? 'danger' : 'default'
+                          }
+                        >
+                          {farm.dataStatus || 'No data'}
+                        </Badge>
                       </div>
-                      <span className="text-xl font-bold text-gray-900">{field.health}</span>
-                    </div>
-                    <div className="mt-3 h-2 bg-gray-100 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-green-500 rounded-full transition-all"
-                        style={{ width: `${field.health}%` }}
-                      />
-                    </div>
-                    <div className="mt-4 pt-4 border-t border-gray-100 flex gap-2">
-                      <Button variant="ghost" size="sm" className="flex-1">Analyze</Button>
-                      <Button variant="ghost" size="sm" className="flex-1">Plan</Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Leaf className="w-5 h-5 text-green-600" />
+                          <span className="text-sm text-gray-600">Soil Health</span>
+                        </div>
+                        <span className="text-xl font-bold text-gray-900">
+                          {farm.dataStatus === 'completed' ? '85' : '—'}
+                        </span>
+                      </div>
+                      <div className="mt-3 h-2 bg-gray-100 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-green-500 rounded-full transition-all"
+                          style={{ width: farm.dataStatus === 'completed' ? '85%' : '0%' }}
+                        />
+                      </div>
+                      <div className="mt-4 pt-4 border-t border-gray-100 flex gap-2">
+                        <Link to={`/monitoring?farm=${farm.id}`} className="flex-1">
+                          <Button variant="ghost" size="sm" className="w-full">Monitor</Button>
+                        </Link>
+                        <Link to={`/crops?farm=${farm.id}`} className="flex-1">
+                          <Button variant="ghost" size="sm" className="w-full">Plan</Button>
+                        </Link>
+                        <Link to={`/reports?farm=${farm.id}`} className="flex-1">
+                          <Button variant="ghost" size="sm" className="w-full">Report</Button>
+                        </Link>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
           </div>
         </TabsContent>
 
         <TabsContent value="alerts">
           <div className="space-y-4">
             <h2 className="text-lg font-semibold text-gray-900">Active Alerts</h2>
-            <div className="space-y-3">
-              {[
-                { level: 'critical', title: 'Severe Water Stress', field: 'South Field 3', time: '2 hours ago', desc: 'Root zone moisture at 15th percentile. Irrigation recommended within 24 hours.' },
-                { level: 'warning', title: 'Moderate Heat Stress', field: 'North Field 1', time: '5 hours ago', desc: '5 consecutive days >35°C. Monitor for pollination impact.' },
-                { level: 'info', title: 'Rotation Window Opening', field: 'East Field 2', time: '1 day ago', desc: 'Optimal planting window for winter wheat in 7-10 days.' },
-              ].map((alert, i) => (
-                <Card key={i} className="border-l-4 border-l-red-500">
-                  <CardContent className="p-6">
-                    <div className="flex items-start gap-4">
-                      <div className={cn(
-                        'p-2 rounded-full flex-shrink-0',
-                        alert.level === 'critical' && 'bg-red-100 text-red-600',
-                        alert.level === 'warning' && 'bg-orange-100 text-orange-600',
-                        alert.level === 'info' && 'bg-blue-100 text-blue-600'
-                      )}>
-                        {alert.level === 'critical' && <AlertTriangle className="w-5 h-5" />}
-                        {alert.level === 'warning' && <AlertTriangle className="w-5 h-5" />}
-                        {alert.level === 'info' && <CheckCircle className="w-5 h-5" />}
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <h3 className="font-semibold text-gray-900">{alert.title}</h3>
-                          <Badge
-                            variant={
-                              alert.level === 'critical' ? 'danger' :
-                              alert.level === 'warning' ? 'warning' : 'info'
-                            }
-                          >
-                            {alert.level}
-                          </Badge>
-                        </div>
-                        <span className="text-sm text-gray-500 ml-auto">{alert.time}</span>
-                      </div>
-                    </div>
-                    <p className="text-sm text-gray-600 mt-3 ml-9">{alert.desc}</p>
-                    <div className="mt-3 flex gap-2 ml-9">
-                      <Button variant="ghost" size="sm">View Details</Button>
-                      <Button variant="ghost" size="sm">Dismiss</Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+            <Card>
+              <CardContent className="p-6 text-center text-gray-500">
+                <AlertTriangle className="w-16 h-16 mx-auto mb-4 text-gray-300" />
+                <p className="font-medium text-gray-900 mb-1">No alerts at this time</p>
+                <p className="text-sm">Create farms and run data collection to enable alert monitoring</p>
+                <Button variant="secondary" className="mt-4" onClick={handleAddField}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Create First Field
+                </Button>
+              </CardContent>
+            </Card>
           </div>
         </TabsContent>
       </Tabs>
     </div>
   )
 }
-
-// Need to import Tabs components
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '../components/ui/Tabs'
-import { Plus, Download } from 'lucide-react'

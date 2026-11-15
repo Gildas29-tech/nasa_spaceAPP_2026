@@ -35,13 +35,13 @@ from app.services import (
 from app.services.nasa_earthdata import BoundingBox, TimeRange
 
 # Import the new data collection routes
-from app.api.routes import data as data_routes
+from app.api.routes.data import router as data_routes
 
 
 router = APIRouter(prefix="/api/v1", tags=["Field Shift API"])
 
 # Include the data collection routes
-router.include_router(data_routes.router, prefix="/data", tags=["Data Collection"])
+router.include_router(data_routes, tags=["Data Collection"])
 
 
 # ============================================================

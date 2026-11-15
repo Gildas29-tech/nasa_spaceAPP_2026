@@ -1,8 +1,10 @@
 """Tests for Data Collection Service."""
 
 import pytest
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from unittest.mock import AsyncMock, patch, MagicMock
+
+from app.services.nasa_earthdata import BoundingBox, TimeRange
 
 from app.services.data_collection import (
     collect_farm_data,
@@ -12,6 +14,11 @@ from app.services.data_collection import (
     collect_smap,
     collect_landsat,
     collect_gaez,
+    collect_modis,
+    collect_ecostress,
+    collect_openet,
+    collect_icesat2,
+    collect_crop_casma,
     FarmDataCollection,
     DataSourceResult,
     DataSourceStatus,
@@ -22,6 +29,7 @@ from app.services.data_collection import (
 def sample_farm_data():
     """Sample farm data for testing."""
     return {
+        "collection_id": "test-collection-123",
         "farm_id": "test-farm-123",
         "farm_name": "Test Farm",
         "geometry": {
@@ -68,7 +76,12 @@ class TestDataCollection:
              patch('app.services.data_collection.collect_gpm') as mock_gpm, \
              patch('app.services.data_collection.collect_smap') as mock_smap, \
              patch('app.services.data_collection.collect_landsat') as mock_landsat, \
-             patch('app.services.data_collection.collect_gaez') as mock_gaez:
+             patch('app.services.data_collection.collect_gaez') as mock_gaez, \
+             patch('app.services.data_collection.collect_modis') as mock_modis, \
+             patch('app.services.data_collection.collect_ecostress') as mock_ecostress, \
+             patch('app.services.data_collection.collect_openet') as mock_openet, \
+             patch('app.services.data_collection.collect_icesat2') as mock_icesat2, \
+             patch('app.services.data_collection.collect_crop_casma') as mock_crop_casma:
 
             # Mock all collectors to return successful results
             mock_power.return_value = DataSourceResult(
@@ -101,19 +114,49 @@ class TestDataCollection:
                 status=DataSourceStatus.UNAVAILABLE,
                 error="Not implemented",
             )
+            mock_modis.return_value = DataSourceResult(
+                source="MODIS",
+                status=DataSourceStatus.SUCCESS,
+                data={"test": "data"},
+            )
+            mock_ecostress.return_value = DataSourceResult(
+                source="ECOSTRESS",
+                status=DataSourceStatus.SUCCESS,
+                data={"test": "data"},
+            )
+            mock_openet.return_value = DataSourceResult(
+                source="OpenET",
+                status=DataSourceStatus.SUCCESS,
+                data={"test": "data"},
+            )
+            mock_icesat2.return_value = DataSourceResult(
+                source="ICESat-2 ATL24",
+                status=DataSourceStatus.SUCCESS,
+                data={"test": "data"},
+            )
+            mock_crop_casma.return_value = DataSourceResult(
+                source="Crop-CASMA / NASA-USDA",
+                status=DataSourceStatus.SUCCESS,
+                data={"test": "data"},
+            )
 
             result = await collect_farm_data(**sample_farm_data)
 
             assert isinstance(result, FarmDataCollection)
             assert result.farm_id == sample_farm_data["farm_id"]
             assert result.farm_name == sample_farm_data["farm_name"]
-            assert len(result.sources) == 6
+            assert len(result.sources) == 11
             assert "nasa_power" in result.sources
             assert "sentinel2" in result.sources
             assert "gpm" in result.sources
             assert "smap" in result.sources
             assert "landsat" in result.sources
             assert "gaez" in result.sources
+            assert "modis" in result.sources
+            assert "ecostress" in result.sources
+            assert "openet" in result.sources
+            assert "icesat2" in result.sources
+            assert "crop_casma" in result.sources
 
     @pytest.mark.asyncio
     async def test_collect_farm_data_handles_exceptions(self, sample_farm_data):
@@ -135,7 +178,12 @@ class TestDataCollection:
              patch('app.services.data_collection.collect_gpm') as mock_gpm, \
              patch('app.services.data_collection.collect_smap') as mock_smap, \
              patch('app.services.data_collection.collect_landsat') as mock_landsat, \
-             patch('app.services.data_collection.collect_gaez') as mock_gaez:
+             patch('app.services.data_collection.collect_gaez') as mock_gaez, \
+             patch('app.services.data_collection.collect_modis') as mock_modis, \
+             patch('app.services.data_collection.collect_ecostress') as mock_ecostress, \
+             patch('app.services.data_collection.collect_openet') as mock_openet, \
+             patch('app.services.data_collection.collect_icesat2') as mock_icesat2, \
+             patch('app.services.data_collection.collect_crop_casma') as mock_crop_casma:
 
             mock_power.return_value = DataSourceResult(
                 source="NASA POWER", status=DataSourceStatus.SUCCESS, data={}
@@ -153,11 +201,28 @@ class TestDataCollection:
             mock_gaez.return_value = DataSourceResult(
                 source="FAO GAEZ", status=DataSourceStatus.SUCCESS, data={}
             )
+            mock_modis.return_value = DataSourceResult(
+                source="MODIS", status=DataSourceStatus.SUCCESS, data={}
+            )
+            mock_ecostress.return_value = DataSourceResult(
+                source="ECOSTRESS", status=DataSourceStatus.SUCCESS, data={}
+            )
+            mock_openet.return_value = DataSourceResult(
+                source="OpenET", status=DataSourceStatus.SUCCESS, data={}
+            )
+            mock_icesat2.return_value = DataSourceResult(
+                source="ICESat-2 ATL24", status=DataSourceStatus.SUCCESS, data={}
+            )
+            mock_crop_casma.return_value = DataSourceResult(
+                source="Crop-CASMA / NASA-USDA", status=DataSourceStatus.SUCCESS, data={}
+            )
 
             result = await collect_farm_data(**sample_farm_data)
 
-            # Should have 3 successful/unavailable, 2 failed
-            assert len(result.get_available_sources()) == 4  # power, smap, gaez + 1 unavailable
+            # Should have 8 successful (power, smap, gaez, modis, ecostress, openet, icesat2, crop_casma),
+            # 2 failed (sentinel2, landsat), 1 unavailable (gpm)
+            # Note: gaez is mocked as SUCCESS in this test, so it counts as available
+            assert len(result.get_available_sources()) == 8
             assert len(result.get_failed_sources()) == 2  # sentinel2, landsat
             assert len(result.get_unavailable_sources()) == 1  # gpm
 
@@ -222,37 +287,115 @@ class TestIndividualCollectors:
             assert "No images found" in result.error
 
     @pytest.mark.asyncio
-    async def test_collect_gpm_placeholder(self):
-        """Test GPM returns placeholder when not implemented."""
-        with patch('app.services.data_collection.get_imerg_precipitation', new_callable=AsyncMock) as mock_get:
-            mock_get.return_value = {
-                "note": "Real implementation requires GES DISC Subset API or Harmony API"
+    async def test_collect_gpm_service(self):
+        """Test GPM collection using real service (mocked)."""
+        from app.services.gpm import get_gpm_precipitation
+        from app.services.nasa_earthdata import NASADataResult, BoundingBox, TimeRange
+        import xarray as xr
+        import numpy as np
+
+        # Create mock result
+        mock_ds = xr.Dataset(
+            {"precipitation_daily": (["time", "lat", "lon"], np.random.rand(10, 5, 5))},
+            coords={
+                "time": [datetime(2024, 1, 1) + timedelta(days=i) for i in range(10)],
+                "lat": np.linspace(38, 38.1, 5),
+                "lon": np.linspace(-120, -119.9, 5),
             }
+        )
+        mock_result = NASADataResult(
+            dataset="GPM_3IMERGHH",
+            variable="precipitation",
+            bbox=BoundingBox(min_lon=-120, min_lat=38, max_lon=-119.9, max_lat=38.1),
+            time_range=TimeRange(start=datetime(2024, 1, 1), end=datetime(2024, 1, 10)),
+            data=mock_ds,
+            metadata={},
+        )
 
-            result = await collect_gpm(38.05, -119.95, date(2024, 1, 1), date(2024, 1, 31))
+        with patch('app.services.data_collection.get_gpm_precipitation', new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = mock_result
 
-            assert result.status == DataSourceStatus.UNAVAILABLE
-            assert "not fully implemented" in result.error.lower()
+            result = await collect_gpm(38.05, -119.95, date(2024, 1, 1), date(2024, 1, 10))
+
+            assert result.status == DataSourceStatus.SUCCESS
+            assert result.source == "GPM IMERG"
+            assert result.data is not None
 
     @pytest.mark.asyncio
-    async def test_collect_smap_placeholder(self):
-        """Test SMAP returns placeholder when not implemented."""
+    async def test_collect_smap_service(self):
+        """Test SMAP collection using real service (mocked)."""
+        from app.services.smap import get_smap_soil_moisture, get_smap_time_series
+        from app.services.nasa_earthdata import NASADataResult, BoundingBox, TimeRange
+        import xarray as xr
+        import numpy as np
+
+        # Create mock surface result
+        mock_surface_ds = xr.Dataset(
+            {"soil_moisture_am": (["time", "lat", "lon"], np.random.rand(10, 5, 5) * 0.5)},
+            coords={
+                "time": [datetime(2024, 1, 1) + timedelta(days=i) for i in range(10)],
+                "lat": np.linspace(38, 38.1, 5),
+                "lon": np.linspace(-120, -119.9, 5),
+            }
+        )
+        mock_surface_result = NASADataResult(
+            dataset="SPL3SMP",
+            variable="soil_moisture_am",
+            bbox=BoundingBox(min_lon=-120, min_lat=38, max_lon=-119.9, max_lat=38.1),
+            time_range=TimeRange(start=datetime(2024, 1, 1), end=datetime(2024, 1, 10)),
+            data=mock_surface_ds,
+            metadata={},
+        )
+
+        # Create mock time series
+        mock_ts = xr.DataArray(
+            np.random.rand(10) * 0.5,
+            coords={"time": [datetime(2024, 1, 1) + timedelta(days=i) for i in range(10)]},
+            dims=["time"],
+        )
+
         with patch('app.services.data_collection.get_smap_soil_moisture', new_callable=AsyncMock) as mock_surface, \
-             patch('app.services.data_collection.get_smap_rootzone_moisture', new_callable=AsyncMock) as mock_root:
+             patch('app.services.data_collection.get_smap_time_series', new_callable=AsyncMock) as mock_ts_func:
 
-            mock_surface.return_value = {"note": "not fully implemented"}
-            mock_root.return_value = {"note": "not fully implemented"}
+            mock_surface.return_value = mock_surface_result
+            mock_ts_func.return_value = mock_ts
 
-            result = await collect_smap(38.05, -119.95, date(2024, 1, 1), date(2024, 1, 31))
+            result = await collect_smap(38.05, -119.95, date(2024, 1, 1), date(2024, 1, 10))
 
-            assert result.status == DataSourceStatus.UNAVAILABLE
-            assert "not fully implemented" in result.error.lower()
+            assert result.status == DataSourceStatus.SUCCESS
+            assert result.source == "SMAP"
+            assert result.data is not None
+            assert "surface" in result.data
+            assert "rootzone" in result.data
 
     @pytest.mark.asyncio
-    async def test_collect_landsat_no_images(self):
-        """Test Landsat collection when no images found."""
-        with patch('app.services.data_collection.search_landsat', new_callable=AsyncMock) as mock_search:
-            mock_search.return_value = []
+    async def test_collect_landsat_service(self):
+        """Test Landsat collection using real service (mocked)."""
+        from app.services.landsat import get_landsat_ndvi
+        from app.services.nasa_earthdata import NASADataResult, BoundingBox, TimeRange
+        import xarray as xr
+        import numpy as np
+
+        # Create mock result
+        mock_ds = xr.Dataset(
+            {"ndvi": (["time", "lat", "lon"], np.random.rand(5, 5, 5))},
+            coords={
+                "time": [datetime(2024, 1, 1) + timedelta(days=i*16) for i in range(5)],
+                "lat": np.linspace(38, 38.1, 5),
+                "lon": np.linspace(-120, -119.9, 5),
+            }
+        )
+        mock_result = NASADataResult(
+            dataset="LC09_L2SP",
+            variable="vegetation_indices",
+            bbox=BoundingBox(min_lon=-120, min_lat=38, max_lon=-119.9, max_lat=38.1),
+            time_range=TimeRange(start=datetime(2024, 1, 1), end=datetime(2024, 1, 31)),
+            data=mock_ds,
+            metadata={},
+        )
+
+        with patch('app.services.data_collection.get_landsat_ndvi', new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = mock_result
 
             result = await collect_landsat(
                 {"type": "Polygon", "coordinates": [[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]]},
@@ -260,8 +403,10 @@ class TestIndividualCollectors:
                 date(2024, 1, 31)
             )
 
-            assert result.status == DataSourceStatus.UNAVAILABLE
-            assert "No Landsat images found" in result.error
+            assert result.status == DataSourceStatus.SUCCESS
+            assert result.source == "Landsat"
+            assert result.data is not None
+            assert "ndvi" in result.data
 
     @pytest.mark.asyncio
     async def test_collect_gaez_placeholder(self):
@@ -280,7 +425,7 @@ class TestIndividualCollectors:
             result = await collect_gaez(38.05, -119.95, ["maize", "wheat"])
 
             assert result.status == DataSourceStatus.UNAVAILABLE
-            assert "not fully implemented" in result.error.lower()
+            assert "not yet implemented" in result.error.lower()
 
 
 class TestDataModels:
@@ -289,6 +434,7 @@ class TestDataModels:
     def test_farm_data_collection_to_dict(self):
         """Test FarmDataCollection to_dict conversion."""
         collection = FarmDataCollection(
+            collection_id="test-collection-123",
             farm_id="test-123",
             farm_name="Test Farm",
             geometry={"type": "Point", "coordinates": [0, 0]},

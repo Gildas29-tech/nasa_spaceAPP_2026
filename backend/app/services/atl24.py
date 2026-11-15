@@ -280,6 +280,52 @@ class ATL24Service(NASAEarthdataBase):
         except Exception:
             return None
 
+    async def get_variable(
+        self,
+        bbox: BoundingBox,
+        time_range: TimeRange,
+        variable: str,
+        **kwargs,
+    ) -> NASADataResult:
+        """Implement abstract method from NASAEarthdataBase."""
+        # Map variable names to methods
+        if variable in ["bathymetry", "bathymetry_data"]:
+            return await self.get_bathymetry(
+                bbox,
+                time_range.start.strftime("%Y-%m-%d"),
+                time_range.end.strftime("%Y-%m-%d"),
+                **kwargs
+            )
+        elif variable in ["sea_surface_height", "ssh"]:
+            return await self.get_sea_surface_height(
+                bbox,
+                time_range.start.strftime("%Y-%m-%d"),
+                time_range.end.strftime("%Y-%m-%d"),
+                **kwargs
+            )
+        elif variable in ["kd", "kd_attenuation"]:
+            return await self.get_kd_attenuation(
+                bbox,
+                time_range.start.strftime("%Y-%m-%d"),
+                time_range.end.strftime("%Y-%m-%d"),
+                **kwargs
+            )
+        elif variable in ["surface_roughness", "roughness"]:
+            return await self.get_surface_roughness(
+                bbox,
+                time_range.start.strftime("%Y-%m-%d"),
+                time_range.end.strftime("%Y-%m-%d"),
+                **kwargs
+            )
+        else:
+            # Default to bathymetry
+            return await self.get_bathymetry(
+                bbox,
+                time_range.start.strftime("%Y-%m-%d"),
+                time_range.end.strftime("%Y-%m-%d"),
+                **kwargs
+            )
+
     async def get_profile(
         self,
         lat: float,

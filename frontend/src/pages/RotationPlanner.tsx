@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { cn } from '../lib/utils'
 import {
   GitBranch,
@@ -21,6 +21,7 @@ import {
   Zap,
   TrendingUp,
   Target,
+  AlertTriangle,
 } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
@@ -28,6 +29,9 @@ import { Badge } from '../components/ui/Badge'
 import { Input } from '../components/ui/Input'
 import { Select } from '../components/ui/Select'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../components/ui/Tabs'
+import { api } from '../lib/api'
+import { useFarmStore, type Farm } from '../stores/farmStore'
+import { useUIStore } from '../stores/uiStore'
 
 const cropOptions = [
   { value: 'corn', label: 'Corn', family: 'Poaceae', season: 'warm', water: 'high', nfix: false, economicValue: 1.0 },
@@ -44,43 +48,21 @@ const cropOptions = [
   { value: 'clover', label: 'Clover (Cover)', family: 'Fabaceae', season: 'cool', water: 'medium', nfix: true, economicValue: 0.4 },
 ]
 
-const mockRotations = [
-  {
-    rank: 1,
-    sequence: ['corn', 'soybean', 'wheat', 'alfalfa', 'alfalfa'],
-    years: 5,
-    scores: { water_conservation: 72, soil_health: 88, profitability: 82, pest_management: 75, climate_resilience: 78, diversification: 65 },
-    total_score: 80.5,
-  },
-  {
-    rank: 2,
-    sequence: ['corn', 'soybean', 'wheat', 'canola', 'pea'],
-    years: 5,
-    scores: { water_conservation: 68, soil_health: 82, profitability: 85, pest_management: 80, climate_resilience: 72, diversification: 85 },
-    total_score: 79.8,
-  },
-  {
-    rank: 3,
-    sequence: ['sorghum', 'soybean', 'wheat', 'sunflower', 'rye'],
-    years: 5,
-    scores: { water_conservation: 88, soil_health: 78, profitability: 72, pest_management: 85, climate_resilience: 82, diversification: 88 },
-    total_score: 78.9,
-  },
-  {
-    rank: 4,
-    sequence: ['corn', 'soybean', 'wheat'],
-    years: 3,
-    scores: { water_conservation: 65, soil_health: 75, profitability: 80, pest_management: 70, climate_resilience: 68, diversification: 45 },
-    total_score: 71.2,
-  },
-  {
-    rank: 5,
-    sequence: ['corn', 'soybean', 'wheat', 'alfalfa'],
-    years: 4,
-    scores: { water_conservation: 70, soil_health: 85, profitability: 80, pest_management: 78, climate_resilience: 75, diversification: 60 },
-    total_score: 77.5,
-  },
-]
+interface RotationResult {
+  rank: number
+  sequence: string[]
+  years: number
+  scores: {
+    water_conservation: number
+    soil_health: number
+    profitability: number
+    pest_management: number
+    climate_resilience: number
+    diversification: number
+  }
+  total_score: number
+  details?: string
+}
 
 const priorityOptions = [
   { key: 'water_conservation', label: 'Water Conservation', icon: Droplet, color: 'text-blue-600' },
@@ -126,7 +108,9 @@ interface FormData {
   maxResults: number
 }
 
-export default function RotationPlanner() {
+export default function RotationPlanner({ farmId }: { farmId?: string }) {
+  const { farms, selectedFarmId, selectFarm } = useFarmStore()
+  const { addToast } = useUIStore()
   const [formData, setFormData] = useState<FormData>({
     currentCrops: ['corn', 'soybean'],
     excludedCrops: [],
@@ -144,15 +128,78 @@ export default function RotationPlanner() {
     maxYears: 5,
     maxResults: 10,
   })
-  const [rotations, setRotations] = useState<typeof mockRotations>(mockRotations)
+  const [rotations, setRotations] = useState<RotationResult[]>([])
   const [loading, setLoading] = useState(false)
   const [activeTab, setActiveTab] = useState('results')
+  const [selectedFarm, setSelectedFarm] = useState<Farm | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  // Set selected farm when farms change or farmId prop is provided
+  useEffect(() => {
+    if (farmId) {
+      const farm = farms.find(f => f.id === farmId)
+      if (farm) {
+        setSelectedFarm(farm)
+        selectFarm(farm.id)
+        // Auto-fill current crops from farm
+        if (farm.crops_of_interest && farm.crops_of_interest.length > 0) {
+          const mappedCrops = farm.crops_of_interest
+            .map(c => cropOptions.find(opt => opt.label.toLowerCase() === c.toLowerCase())?.value)
+            .filter(Boolean) as string[]
+          if (mappedCrops.length > 0) {
+            setFormData(prev => ({ ...prev, currentCrops: mappedCrops }))
+          }
+        }
+      }
+    } else if (farms.length > 0) {
+      const farm = farms.find(f => f.id === selectedFarmId) || farms[0]
+      setSelectedFarm(farm)
+      selectFarm(farm.id)
+      if (farm.crops_of_interest && farm.crops_of_interest.length > 0) {
+        const mappedCrops = farm.crops_of_interest
+          .map(c => cropOptions.find(opt => opt.label.toLowerCase() === c.toLowerCase())?.value)
+          .filter(Boolean) as string[]
+        if (mappedCrops.length > 0) {
+          setFormData(prev => ({ ...prev, currentCrops: mappedCrops }))
+        }
+      }
+    } else {
+      setSelectedFarm(null)
+      selectFarm(null)
+    }
+  }, [farms, selectedFarmId, selectFarm, farmId])
 
   const handleOptimize = async () => {
+    if (!selectedFarm) {
+      addToast({ type: 'warning', title: 'No farm selected', message: 'Please select a farm first' })
+      return
+    }
+
     setLoading(true)
-    await new Promise(r => setTimeout(r, 1500))
-    setLoading(false)
-    // In real app, would call API
+    setError(null)
+    try {
+      const data = await api.post<RotationResult[]>('/api/v1/analysis/rotation', {
+        farm_id: selectedFarm.id,
+        current_crops: formData.currentCrops,
+        excluded_crops: formData.excludedCrops,
+        required_crops: formData.requiredCrops,
+        priorities: formData.priorities,
+        climate_zone: formData.climateZone,
+        soil_type: formData.soilType,
+        min_years: formData.minYears,
+        max_years: formData.maxYears,
+        max_results: formData.maxResults,
+      })
+      setRotations(data)
+      setActiveTab('results')
+      addToast({ type: 'success', title: 'Optimization complete', message: `Found ${data.length} optimal rotations` })
+    } catch (err: any) {
+      console.error('Rotation optimization failed:', err)
+      setError('Failed to optimize rotations')
+      addToast({ type: 'error', title: 'Optimization failed', message: 'Please try again' })
+    } finally {
+      setLoading(false)
+    }
   }
 
   const handlePriorityChange = (key: string, value: number) => {
@@ -197,7 +244,7 @@ export default function RotationPlanner() {
           <h1 className="text-2xl font-display font-bold text-gray-900">Rotation Planner</h1>
           <p className="text-gray-500 mt-1">Optimize crop rotations for resilience, profitability, and soil health</p>
         </div>
-        <Button onClick={handleOptimize} loading={loading}>
+        <Button onClick={handleOptimize} loading={loading} disabled={!selectedFarm || loading}>
           <RefreshCw className="w-4 h-4 mr-2" />
           Optimize Rotations
         </Button>
@@ -212,6 +259,13 @@ export default function RotationPlanner() {
           </CardTitle>
         </CardHeader>
         <CardContent>
+          {selectedFarm && (
+            <div className="mb-4 p-3 rounded-lg bg-green-50 border border-green-200">
+              <p className="text-sm font-medium text-green-800">Planning for: {selectedFarm.name}</p>
+              <p className="text-xs text-green-700">Current crops auto-filled from farm data</p>
+            </div>
+          )}
+
           {/* Current Crops */}
           <div className="mb-6">
             <label className="label">Current Crops (to diversify from)</label>
@@ -387,7 +441,7 @@ export default function RotationPlanner() {
           </div>
 
           <div className="flex gap-2">
-            <Button onClick={handleOptimize} loading={loading} className="flex-1">
+            <Button onClick={handleOptimize} loading={loading} className="flex-1" disabled={!selectedFarm || loading}>
               <RefreshCw className="w-4 h-4 mr-2" />
               Find Optimal Rotations
             </Button>
@@ -395,6 +449,19 @@ export default function RotationPlanner() {
           </div>
         </CardContent>
       </Card>
+
+      {error && (
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="p-4 flex items-center gap-3 text-red-700">
+            <AlertTriangle className="w-5 h-5" />
+            <span>{error}</span>
+            <Button variant="ghost" size="sm" onClick={handleOptimize} className="ml-auto">
+              <RefreshCw className="w-4 h-4 mr-1" />
+              Réessayer
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Results */}
       <Tabs defaultValue="results" onChange={setActiveTab}>
@@ -406,119 +473,131 @@ export default function RotationPlanner() {
 
         <TabsContent value="results">
           <div className="space-y-4 mt-4">
-            {rotations.map((rotation) => (
-              <Card key={rotation.rank} className="overflow-hidden">
-                <CardContent className="p-0">
-                  <div className="flex flex-col md:flex-row">
-                    {/* Rank & Score */}
-                    <div className={cn('p-6 md:w-48 border-r border-gray-100 md:border-r md:border-b-0 text-center', rotation.rank === 1 ? 'bg-gradient-to-b from-yellow-50 to-white' : 'bg-gray-50')}>
-                      <div className="text-4xl font-bold text-gray-900">{rotation.total_score.toFixed(1)}</div>
-                      <Badge variant={rotation.rank <= 3 ? 'success' : 'gray'} className="mt-2">
-                        #{rotation.rank}
-                      </Badge>
-                      <p className="text-sm text-gray-500 mt-2">{rotation.years}-year rotation</p>
-                    </div>
-
-                    {/* Sequence */}
-                    <div className="flex-1 p-6">
-                      <div className="flex items-center gap-2 mb-4 flex-wrap">
-                        {rotation.sequence.map((crop, i) => {
-                          const info = cropOptions.find(c => c.value === crop)
-                          return (
-                            <span key={i} className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-gray-100 text-sm font-medium text-gray-700">
-                              {info ? (
-                                <>
-                                  {info.nfix && <Leaf className="w-3 h-3 text-green-600" />}
-                                  {info.label}
-                                  {info.water === 'low' && <Droplet className="w-3 h-3 text-blue-600 opacity-50" />}
-                                </>
-                              ) : crop}
-                              {i < rotation.sequence.length - 1 && <ArrowRight className="w-4 h-4 text-gray-400 ml-1" />}
-                            </span>
-                          )
-                        })}
+            {rotations.length > 0 ? (
+              rotations.map((rotation) => (
+                <Card key={rotation.rank} className="overflow-hidden">
+                  <CardContent className="p-0">
+                    <div className="flex flex-col md:flex-row">
+                      {/* Rank & Score */}
+                      <div className={cn('p-6 md:w-48 border-r border-gray-100 md:border-r md:border-b-0 text-center', rotation.rank === 1 ? 'bg-gradient-to-b from-yellow-50 to-white' : 'bg-gray-50')}>
+                        <div className="text-4xl font-bold text-gray-900">{rotation.total_score.toFixed(1)}</div>
+                        <Badge variant={rotation.rank <= 3 ? 'success' : 'gray'} className="mt-2">
+                          #{rotation.rank}
+                        </Badge>
+                        <p className="text-sm text-gray-500 mt-2">{rotation.years}-year rotation</p>
                       </div>
 
-                      {/* Score Breakdown */}
-                      <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
-                        {Object.entries(rotation.scores).map(([key, score]) => {
-                          const priority = priorityOptions.find(p => p.key === key)
-                          return (
-                            <div key={key} className="p-3 rounded-xl bg-gray-50 text-center">
-                              <div className="flex items-center justify-center gap-1 mb-1">
-                                {priority?.icon && <priority.icon className="w-4 h-4 text-gray-400" />}
-                                <span className="text-xs text-gray-500">{priority?.label || key}</span>
+                      {/* Sequence */}
+                      <div className="flex-1 p-6">
+                        <div className="flex items-center gap-2 mb-4 flex-wrap">
+                          {rotation.sequence.map((crop, i) => {
+                            const info = cropOptions.find(c => c.value === crop)
+                            return (
+                              <span key={i} className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-gray-100 text-sm font-medium text-gray-700">
+                                {info ? (
+                                  <>
+                                    {info.nfix && <Leaf className="w-3 h-3 text-green-600" />}
+                                    {info.label}
+                                    {info.water === 'low' && <Droplet className="w-3 h-3 text-blue-600 opacity-50" />}
+                                  </>
+                                ) : crop}
+                                {i < rotation.sequence.length - 1 && <ArrowRight className="w-4 h-4 text-gray-400 ml-1" />}
+                              </span>
+                            )
+                          })}
+                        </div>
+
+                        {/* Score Breakdown */}
+                        <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+                          {Object.entries(rotation.scores).map(([key, score]) => {
+                            const priority = priorityOptions.find(p => p.key === key)
+                            return (
+                              <div key={key} className="p-3 rounded-xl bg-gray-50 text-center">
+                                <div className="flex items-center justify-center gap-1 mb-1">
+                                  {priority?.icon && <priority.icon className="w-4 h-4 text-gray-400" />}
+                                  <span className="text-xs text-gray-500">{priority?.label || key}</span>
+                                </div>
+                                <div className={cn('text-2xl font-bold', getScoreColor(score))}>{score}</div>
+                                <div className={cn('h-1.5 rounded-full mt-1', getScoreBg(score))}>
+                                  <div className="h-full rounded-full" style={{ width: `${score}%` }} />
+                                </div>
                               </div>
-                              <div className={cn('text-2xl font-bold', getScoreColor(score))}>{score}</div>
-                              <div className={cn('h-1.5 rounded-full mt-1', getScoreBg(score))}>
-                                <div className="h-full rounded-full" style={{ width: `${score}%` }} />
-                              </div>
-                            </div>
-                          )
-                        })}
+                            )
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Actions */}
+                      <div className="p-6 md:w-48 border-l border-gray-100 flex flex-col items-center justify-center gap-2">
+                        <Button variant="primary" size="sm" className="w-full" onClick={() => alert(rotation.details || 'Details coming soon')}>
+                          View Details
+                        </Button>
+                        <Button variant="ghost" size="sm" className="w-full">
+                          <Download className="w-4 h-4 mr-2" />
+                          Export
+                        </Button>
+                        <Button variant="ghost" size="sm" className="w-full text-gray-600">
+                          <Zap className="w-4 h-4 mr-2" />
+                          Simulate
+                        </Button>
                       </div>
                     </div>
-
-                    {/* Actions */}
-                    <div className="p-6 md:w-48 border-l border-gray-100 flex flex-col items-center justify-center gap-2">
-                      <Button variant="primary" size="sm" className="w-full">
-                        View Details
-                      </Button>
-                      <Button variant="ghost" size="sm" className="w-full">
-                        <Download className="w-4 h-4 mr-2" />
-                        Export
-                      </Button>
-                      <Button variant="ghost" size="sm" className="w-full text-gray-600">
-                        <Zap className="w-4 h-4 mr-2" />
-                        Simulate
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                  </CardContent>
+                </Card>
+              ))
+            ) : (
+              <div className="text-center py-12 text-gray-500">
+                <GitBranch className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                <p>No rotations generated yet</p>
+                <p className="text-sm mt-1">Configure your preferences and click "Optimize Rotations"</p>
+              </div>
+            )}
           </div>
         </TabsContent>
 
         <TabsContent value="comparison">
           <div className="mt-4">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Side-by-Side Comparison</h3>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-gray-500 border-b border-gray-200">
-                    <th className="pb-2 font-medium">Metric</th>
-                    {rotations.slice(0, 5).map((r) => (
-                      <th key={r.rank} className="pb-2 font-medium text-center">#{r.rank} ({r.total_score.toFixed(1)})</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {Object.keys(rotations[0].scores).map((key) => {
-                    const priority = priorityOptions.find(p => p.key === key)
-                    return (
-                      <tr key={key} className="border-b border-gray-100 hover:bg-gray-50">
-                        <td className="py-3 font-medium flex items-center gap-2">
-                          {priority?.icon && <priority.icon className="w-4 h-4 text-gray-400" />}
-                          {priority?.label || key}
-                        </td>
-                        {rotations.slice(0, 5).map((r) => (
-                          <td key={r.rank} className="py-3 text-center font-semibold" style={{ color: getScoreColor(r.scores[key as keyof typeof r.scores]) }}>
-                            {r.scores[key as keyof typeof r.scores]}
+            {rotations.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-gray-500 border-b border-gray-200">
+                      <th className="pb-2 font-medium">Metric</th>
+                      {rotations.slice(0, 5).map((r) => (
+                        <th key={r.rank} className="pb-2 font-medium text-center">#{r.rank} ({r.total_score.toFixed(1)})</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.keys(rotations[0].scores).map((key) => {
+                      const priority = priorityOptions.find(p => p.key === key)
+                      return (
+                        <tr key={key} className="border-b border-gray-100 hover:bg-gray-50">
+                          <td className="py-3 font-medium flex items-center gap-2">
+                            {priority?.icon && <priority.icon className="w-4 h-4 text-gray-400" />}
+                            {priority?.label || key}
                           </td>
-                        ))}
-                      </tr>
-                    )
-                  })}
-                  <tr className="bg-gray-50 font-bold">
-                    <td className="py-3">Total Score</td>
-                    {rotations.slice(0, 5).map((r) => (
-                      <td key={r.rank} className="py-3 text-center text-lg text-primary-600">{r.total_score.toFixed(1)}</td>
-                    ))}
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+                          {rotations.slice(0, 5).map((r) => (
+                            <td key={r.rank} className="py-3 text-center font-semibold" style={{ color: getScoreColor(r.scores[key as keyof typeof r.scores]) }}>
+                              {r.scores[key as keyof typeof r.scores]}
+                            </td>
+                          ))}
+                        </tr>
+                      )
+                    })}
+                    <tr className="bg-gray-50 font-bold">
+                      <td className="py-3">Total Score</td>
+                      {rotations.slice(0, 5).map((r) => (
+                        <td key={r.rank} className="py-3 text-center text-lg text-primary-600">{r.total_score.toFixed(1)}</td>
+                      ))}
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="text-gray-500 text-center py-8">Run optimization to see comparison</p>
+            )}
           </div>
         </TabsContent>
 

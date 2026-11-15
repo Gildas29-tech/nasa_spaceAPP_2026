@@ -181,6 +181,7 @@ async def run_data_collection(
     """Background task to run data collection."""
     try:
         collection = await collect_farm_data(
+            collection_id=collection_id,
             farm_id=farm_id,
             farm_name=farm_name,
             geometry=geometry,
@@ -194,6 +195,7 @@ async def run_data_collection(
         # Store error result
         from app.services.data_collection import FarmDataCollection, DataSourceResult, DataSourceStatus
         error_collection = FarmDataCollection(
+            collection_id=collection_id,
             farm_id=farm_id,
             farm_name=farm_name,
             geometry=geometry,
@@ -308,18 +310,18 @@ async def get_collection_summary(collection_id: str) -> Dict[str, Any]:
                         "cloud_cover": latest["metadata"].get("cloud_cover"),
                     }
 
-            # GPM - precipitation
+            # GPM - precipitation (REAL)
             elif name == "gpm" and "data" in data:
                 summary["key_metrics"]["precipitation"] = {
-                    "source": "GPM IMERG",
-                    "note": "Point extraction not fully implemented",
+                    "source": "GPM IMERG (REAL)",
+                    "daily_precipitation": data["data"].get("daily_precipitation", {}),
                 }
 
-            # SMAP - soil moisture
+            # SMAP - soil moisture (REAL)
             elif name == "smap" and "surface" in data:
                 summary["key_metrics"]["soil_moisture"] = {
-                    "source": "SMAP",
-                    "note": "Point extraction not fully implemented",
+                    "source": "SMAP (REAL)",
+                    "surface_ts": data["data"]["surface"].get("time_series", {}),
                 }
 
             # Landsat - latest acquisition
@@ -336,7 +338,7 @@ async def get_collection_summary(collection_id: str) -> Dict[str, Any]:
                 suit = data["suitability"]
                 summary["key_metrics"]["crop_suitability"] = {
                     "top_crops": suit.get("ranked_crops", [])[:5],
-                    "note": "GAEZ raster extraction not fully implemented",
+                    "note": "GAEZ requires raster extraction (not yet implemented)",
                 }
 
     return summary
@@ -376,7 +378,7 @@ async def list_data_sources() -> Dict[str, Any]:
                 "spatial_resolution": "0.1° x 0.1° (~10km)",
                 "products": ["GPM_3IMERGHH", "GPM_3IMERGDF", "GPM_3IMERGLATE"],
                 "auth_required": True,
-                "status": "placeholder - needs GES DISC Subset API",
+                "status": "operational (earthaccess)",
             },
             {
                 "id": "smap",
@@ -386,7 +388,7 @@ async def list_data_sources() -> Dict[str, Any]:
                 "spatial_resolution": "9km (Level 3), 9km (Level 4)",
                 "products": ["SPL2SMP", "SPL3SMP", "SPL4SMAU"],
                 "auth_required": True,
-                "status": "placeholder - needs AppEEARS or NSIDC DAAC",
+                "status": "operational (earthaccess)",
             },
             {
                 "id": "landsat",
@@ -398,6 +400,56 @@ async def list_data_sources() -> Dict[str, Any]:
                 "indices": ["NDVI", "EVI", "SAVI", "NDWI", "NBR"],
                 "auth_required": True,
                 "status": "operational",
+            },
+            {
+                "id": "modis",
+                "name": "MODIS (Terra/Aqua)",
+                "description": "Vegetation indices (NDVI/EVI) and Land Surface Temperature",
+                "temporal_resolution": "16-day (NDVI/EVI), 8-day (LST)",
+                "spatial_resolution": "250m (NDVI/EVI), 1km (LST)",
+                "products": ["MOD13Q1", "MYD13Q1", "MOD11A2", "MYD11A2"],
+                "auth_required": True,
+                "status": "operational (earthaccess)",
+            },
+            {
+                "id": "ecostress",
+                "name": "ECOSTRESS (ISS)",
+                "description": "Evapotranspiration, water stress, land surface temperature",
+                "temporal_resolution": "~4-day revisit",
+                "spatial_resolution": "70m",
+                "products": ["ECOL2EST", "ECOL3ESI", "ECOL3WUE", "ECOL3ETPT"],
+                "auth_required": True,
+                "status": "operational (earthaccess)",
+            },
+            {
+                "id": "openet",
+                "name": "OpenET",
+                "description": "Field-scale evapotranspiration (Landsat-based, CONUS/Western US)",
+                "temporal_resolution": "Daily, Monthly, Annual",
+                "spatial_resolution": "30m",
+                "models": ["ensemble", "geeSEBAL", "ALEXI", "DisALEXI", "SSEBop", "SIMS", "PT-JPL"],
+                "auth_required": True,
+                "status": "operational (API key required)",
+            },
+            {
+                "id": "icesat2",
+                "name": "ICESat-2 ATL24",
+                "description": "Coastal bathymetry from photon-counting lidar",
+                "temporal_resolution": "Continuous (along-track)",
+                "spatial_resolution": "~10m along-track",
+                "products": ["ATL24"],
+                "auth_required": True,
+                "status": "operational (earthaccess, coastal only)",
+            },
+            {
+                "id": "crop_casma",
+                "name": "Crop-CASMA / NASA-USDA",
+                "description": "Soil moisture analytics (CONUS: Crop-CASMA, Global: NASA-USDA)",
+                "temporal_resolution": "Daily",
+                "spatial_resolution": "1km (Crop-CASMA), 0.25° (NASA-USDA)",
+                "layers": ["surface_sm", "rootzone_sm", "profile_sm", "anomalies", "crop_condition"],
+                "auth_required": False,
+                "status": "operational (CONUS/Global)",
             },
             {
                 "id": "gaez",
