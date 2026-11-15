@@ -633,11 +633,13 @@ export default function FieldMap() {
 
     setIsGeocoding(true)
     navigator.geolocation.getCurrentPosition(
-      (position) => {
+      async (position) => {
         const location: Coordinates = { lng: position.coords.longitude, lat: position.coords.latitude }
         setMapView({ center: location, zoom: 13 })
         mapRef.current?.flyTo({ center: [location.lng, location.lat], zoom: 13 })
-        reverseGeocode(location.lat, location.lng).then(structuredAddress => {
+
+        try {
+          const structuredAddress = await reverseGeocode(location.lat, location.lng)
           const displayName = structuredAddress?.displayName || 'Position actuelle'
           const geoLocation: GeoLocation = {
             lat: location.lat,
@@ -649,22 +651,41 @@ export default function FieldMap() {
             region: structuredAddress?.region,
             county: structuredAddress?.county,
           }
+
           setSelectedLocation(geoLocation)
           updateMarker(location, displayName)
           toast({ title: 'Position trouvée', description: displayName, variant: 'success' })
-        }).catch(() => {
-          // Even if reverse geocode fails, still set the location
-          const displayName = 'Position actuelle'
+
+          // Auto-determine soil type (same as map click)
+          setIsDeterminingSoil(true)
+          const determinedSoilType = await determineSoilType(location.lat, location.lng)
+          setSoilType(determinedSoilType)
+          setIsDeterminingSoil(false)
+
+          // Pre-fill farm form with auto-determined values (same as map click)
+          setFarmFormData(prev => ({
+            ...prev,
+            name: `Field at ${location.lat.toFixed(4)}, ${location.lng.toFixed(4)}`,
+            soilType: determinedSoilType,
+            description: `${determinedSoilType} | ${structuredAddress?.country || 'Unknown country'}, ${structuredAddress?.state || structuredAddress?.region || 'Unknown region'}`,
+          }))
+
+          // Show the farm creation form
+          setShowFarmForm(true)
+        } catch (error) {
+          console.error('Geocoding failed:', error)
+          const fallbackName = 'Position actuelle'
           const geoLocation: GeoLocation = {
             lat: location.lat,
             lng: location.lng,
-            displayName,
+            displayName: fallbackName,
           }
           setSelectedLocation(geoLocation)
-          updateMarker(location, displayName)
+          updateMarker(location, fallbackName)
           toast({ title: 'Position trouvée', description: 'Coordonnées obtenues (adresse non disponible)', variant: 'success' })
-        })
-        setIsGeocoding(false)
+        } finally {
+          setIsGeocoding(false)
+        }
       },
       (error) => {
         let message = error.message
