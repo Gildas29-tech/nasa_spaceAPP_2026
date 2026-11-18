@@ -21,36 +21,7 @@ Farmers worldwide face:
 - [NASA Earthdata Login](https://urs.earthdata.nasa.gov/users/new) (free account)
 - Node.js 18+ (for web frontend)
 
-### Installation
-
-```bash
-# Clone the repository
-git clone https://github.com/yourusername/nasa-space-apps-2026.git
-cd nasa-space-apps-2026
-
-# Backend setup
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-pip install -r requirements.txt
-
-# Frontend setup
-cd frontend
-npm install
-npm run dev
-```
-
-### Configuration
-
-```bash
-# Copy environment template
-cp .env.example .env
-
-# Edit with your credentials
-# EARTHDATA_USERNAME=your_username
-# EARTHDATA_PASSWORD=your_password
-# NASA_API_KEY=your_nasa_api_key (optional, for higher rate limits)
-```
-
+###
 ##  NASA Datasets Integrated
 
 | Dataset | Source | Resolution | Variables | Access Method |
