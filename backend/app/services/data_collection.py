@@ -285,20 +285,6 @@ async def collect_gpm(
     end_date: date,
 ) -> DataSourceResult:
     """Collect GPM IMERG precipitation data (REAL implementation via earthaccess)."""
-    # Check for Earthdata credentials
-    if not check_earthdata_credentials():
-        return DataSourceResult(
-            source="GPM IMERG",
-            status=DataSourceStatus.UNAVAILABLE,
-            error=get_missing_credentials_error("GPM IMERG"),
-        )
-
-    return await catalog_earthdata(
-        "GPM IMERG",
-        [("GPM_3IMERGDE", "07"), ("GPM_3IMERGDF", "07")],
-        latitude, longitude, start_date, end_date,
-    )
-
     try:
         from app.services.gpm import BoundingBox
         # Use larger bbox (0.5° ~ 50km) to ensure granule overlap with 0.1° grid
@@ -360,21 +346,6 @@ async def collect_smap(
     end_date: date,
 ) -> DataSourceResult:
     """Collect SMAP soil moisture data (REAL implementation via earthaccess)."""
-    # Check for Earthdata credentials
-    if not check_earthdata_credentials():
-        return DataSourceResult(
-            source="SMAP",
-            status=DataSourceStatus.UNAVAILABLE,
-            error=get_missing_credentials_error("SMAP"),
-        )
-
-    return await catalog_earthdata(
-        "SMAP",
-        [("SPL3SMP", "009"), ("SPL3SMP", None)],
-        latitude, longitude, start_date, end_date,
-        pad=0.25,
-    )
-
     try:
         from app.services.smap import BoundingBox
         # Use larger bbox (0.25° ~ 25km) to ensure granule overlap with 9km grid
@@ -441,14 +412,6 @@ async def collect_landsat(
     end_date: date,
 ) -> DataSourceResult:
     """Collect Landsat vegetation indices (REAL implementation via earthaccess)."""
-    # Check for Earthdata credentials
-    if not check_earthdata_credentials():
-        return DataSourceResult(
-            source="Landsat",
-            status=DataSourceStatus.UNAVAILABLE,
-            error=get_missing_credentials_error("Landsat"),
-        )
-
     coords = geometry.get("coordinates", [[]])[0]
     if not coords:
         return DataSourceResult(source="Landsat", status=DataSourceStatus.FAILED, error="Farm geometry has no coordinates")
@@ -460,58 +423,6 @@ async def collect_landsat(
         lat, lon, start_date, end_date,
         pad=0.5,
     )
-
-    try:
-        from app.services.nasa_earthdata import BoundingBox
-        # Extract bbox from geometry
-        coords = geometry.get("coordinates", [[]])[0]
-        lons = [c[0] for c in coords]
-        lats = [c[1] for c in coords]
-        # Add small buffer (0.05° ~ 5km) to ensure granule overlap for 30m data
-        min_lon, max_lon = min(lons), max(lons)
-        min_lat, max_lat = min(lats), max(lats)
-        bbox = BoundingBox(
-            min_lon=min_lon - 0.025, min_lat=min_lat - 0.025,
-            max_lon=max_lon + 0.025, max_lat=max_lat + 0.025,
-        )
-
-        # Get vegetation indices (NDVI, SAVI, NDWI, NDMI)
-        ndvi_result = await get_landsat_ndvi(bbox, start_date.isoformat(), end_date.isoformat())
-
-        return DataSourceResult(
-            source="Landsat",
-            status=DataSourceStatus.SUCCESS,
-            data={
-                "ndvi": ndvi_result.data.to_dict() if hasattr(ndvi_result.data, 'to_dict') else {},
-                "metadata": ndvi_result.metadata,
-            },
-            metadata={
-                "product": "LC09_L2SP",
-                "spatial_resolution": "30m",
-                "indices": ["ndvi"],
-            },
-        )
-    except ValueError as e:
-        if "granules found" in str(e).lower() or "no data" in str(e).lower():
-            logger.warning(f"Landsat no granules found: {e}")
-            return DataSourceResult(
-                source="Landsat",
-                status=DataSourceStatus.UNAVAILABLE,
-                error=f"No data available for this period/location: {e}",
-            )
-        logger.error(f"Landsat collection failed: {e}")
-        return DataSourceResult(
-            source="Landsat",
-            status=DataSourceStatus.FAILED,
-            error=str(e),
-        )
-    except Exception as e:
-        logger.error(f"Landsat collection failed: {e}")
-        return DataSourceResult(
-            source="Landsat",
-            status=DataSourceStatus.FAILED,
-            error=str(e),
-        )
 
 
 async def collect_modis(

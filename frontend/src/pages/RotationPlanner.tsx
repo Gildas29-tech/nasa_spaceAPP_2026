@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { cn } from '../lib/utils'
+import { cn, downloadCsv } from '../lib/utils'
 import {
   GitBranch,
   Leaf,
@@ -37,7 +37,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '../components/ui/Tabs'
 import { api } from '../lib/api'
 import { useFarmStore, type Farm } from '../stores/farmStore'
 import { useUIStore } from '../stores/uiStore'
-import { AnimatedPage, RevealOnScroll, StaggeredContainer } from '../components/PageTransition'
+import { AnimatedPage } from '../components/PageTransition'
 import { Skeleton, CardSkeleton, StatCardSkeleton, TableSkeleton } from '../components/ui/Skeleton'
 
 const cropOptions = [
@@ -121,20 +121,14 @@ function RotationPlannerSkeleton() {
     <AnimatedPage>
       <div className="space-y-6 animate-fade-in">
         <PageHero kicker="CropShift" title="Plan de rotation" subtitle="Plusieurs rotations classées selon le sol, l'eau et le revenu." />
-
-        <RevealOnScroll transition="slide-up" delay={100}>
-          <CardSkeleton className="animate-stagger-slide-up" />
-        </RevealOnScroll>
-
-        <RevealOnScroll transition="slide-up" delay={200}>
-          <StaggeredContainer staggerDelay={80} transition="stagger-slide-up">
-            <StatCardSkeleton />
-            <StatCardSkeleton />
-            <StatCardSkeleton />
-            <StatCardSkeleton />
-            <StatCardSkeleton />
-          </StaggeredContainer>
-        </RevealOnScroll>
+        <CardSkeleton className="animate-fade-in" style={{ animationDelay: '100ms' }} />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 animate-fade-in" style={{ animationDelay: '200ms' }}>
+          <StatCardSkeleton />
+          <StatCardSkeleton />
+          <StatCardSkeleton />
+          <StatCardSkeleton />
+          <StatCardSkeleton />
+        </div>
       </div>
     </AnimatedPage>
   )
@@ -142,106 +136,98 @@ function RotationPlannerSkeleton() {
 
 function ChartCard({ title, subtitle, icon, children, className, delay = 0, ...props }: any) {
   return (
-    <RevealOnScroll transition="slide-up" delay={delay} key={title}>
-      <Card variant="elevated" className={cn('hover-lift', className)} {...props}>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            {icon && <span className="p-1.5 rounded-lg bg-primary-100 text-primary-600">{icon}</span>}
-            <div>
-              <span>{title}</span>
-              {subtitle && <p className="text-xs text-gray-500 mt-0.5">{subtitle}</p>}
-            </div>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="animate-fade-in" style={{ animationDelay: '100ms' }}>
-          {children}
-        </CardContent>
-      </Card>
-    </RevealOnScroll>
+    <Card variant="elevated" className={cn('hover-lift animate-fade-in', className)} {...props} style={{ animationDelay: `${delay}ms` }}>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          {icon && <span className="p-1.5 rounded-lg bg-primary-100 text-primary-600">{icon}</span>}
+          <div>
+            <span>{title}</span>
+            {subtitle && <p className="text-xs text-gray-500 mt-0.5">{subtitle}</p>}
+          </div>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="animate-fade-in" style={{ animationDelay: '100ms' }}>
+        {children}
+      </CardContent>
+    </Card>
   )
 }
 
 function StatMetricCard({ icon: Icon, iconBg, label, value, delay = 0, trend }: any) {
   return (
-    <RevealOnScroll transition="scale-in" delay={delay}>
-      <Card variant="elevated" className="hover-lift">
-        <CardContent className="p-4 animate-fade-in">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className={cn('p-3 rounded-xl', iconBg + '100')}>
-                <Icon className={cn('w-6 h-6', iconBg)} />
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">{label}</p>
-                <p className="text-2xl font-bold text-gray-900 animate-count-up">{value}</p>
-              </div>
+    <Card variant="elevated" className="hover-lift animate-fade-in" style={{ animationDelay: `${delay}ms` }}>
+      <CardContent className="p-4 animate-fade-in" style={{ animationDelay: '50ms' }}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className={cn('p-3 rounded-xl', iconBg + '100')}>
+              <Icon className={cn('w-6 h-6', iconBg)} />
             </div>
-            {trend && (
-              <div className={cn('flex items-center gap-1 text-sm font-medium', trend > 0 ? 'text-green-600' : 'text-red-600')}>
-                <TrendingUp className="w-4 h-4" />
-                <span>{Math.abs(trend)}%</span>
-              </div>
-            )}
+            <div>
+              <p className="text-sm text-gray-500">{label}</p>
+              <p className="text-2xl font-bold text-gray-900 animate-count-up">{value}</p>
+            </div>
           </div>
-        </CardContent>
-      </Card>
-    </RevealOnScroll>
+          {trend && (
+            <div className={cn('flex items-center gap-1 text-sm font-medium', trend > 0 ? 'text-green-600' : 'text-red-600')}>
+              <TrendingUp className="w-4 h-4" />
+              <span>{Math.abs(trend)}%</span>
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
   )
 }
 
 function PrioritySlider({ priority, value, onChange, delay = 0 }: { priority: typeof priorityOptions[0]; value: number; onChange: (value: number) => void; delay?: number }) {
   return (
-    <RevealOnScroll transition="slide-up" delay={delay}>
-      <div className="p-4 rounded-xl bg-gray-50 animate-fade-in hover:bg-gray-100 transition-colors">
-        <div className="flex items-center gap-2 mb-2">
-          <div className={cn('p-2 rounded-lg', priority.bg)}>
-            <priority.icon className={cn('w-5 h-5', priority.color)} />
-          </div>
-          <span className="font-medium text-sm">{priority.label}</span>
+    <div className="p-4 rounded-xl bg-gray-50 animate-fade-in hover:bg-gray-100 transition-colors" style={{ animationDelay: `${delay}ms` }}>
+      <div className="flex items-center gap-2 mb-2">
+        <div className={cn('p-2 rounded-lg', priority.bg)}>
+          <priority.icon className={cn('w-5 h-5', priority.color)} />
         </div>
-        <div className="flex items-center gap-2">
-          <input
-            type="range"
-            min="0"
-            max="100"
-            step="5"
-            value={Math.round(value * 100)}
-            onChange={(e) => onChange(parseInt(e.target.value) / 100)}
-            className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-primary-600"
-          />
-          <span className="text-sm font-medium text-gray-900 w-12 text-right">
-            {Math.round(value * 100)}%
-          </span>
-        </div>
+        <span className="font-medium text-sm">{priority.label}</span>
       </div>
-    </RevealOnScroll>
+      <div className="flex items-center gap-2">
+        <input
+          type="range"
+          min="0"
+          max="100"
+          step="5"
+          value={Math.round(value * 100)}
+          onChange={(e) => onChange(parseInt(e.target.value) / 100)}
+          className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-primary-600"
+        />
+        <span className="text-sm font-medium text-gray-900 w-12 text-right">
+          {Math.round(value * 100)}%
+        </span>
+      </div>
+    </div>
   )
 }
 
 function CropBadge({ crop, variant = 'default', removable, onRemove, delay = 0 }: { crop: string; variant?: 'default' | 'gray' | 'info'; removable?: boolean; onRemove?: () => void; delay?: number }) {
   const cropInfo = cropOptions.find(c => c.value === crop)
   return (
-    <RevealOnScroll transition="scale-in" delay={delay}>
-      <div className="flex items-center gap-1 animate-fade-in">
-        <Badge variant={variant} className="gap-1 animate-scale-in">
-          {cropInfo?.nfix && <Leaf className="w-3 h-3 text-green-600" />}
-          {cropInfo?.label || crop}
-          {cropInfo?.water === 'low' && <Droplet className="w-3 h-3 text-blue-600 opacity-50" />}
-        </Badge>
-        {removable && onRemove && (
-          <button
-            onClick={(e) => { e.stopPropagation(); onRemove() }}
-            className="ml-1 p-1 hover:bg-gray-200 rounded transition-colors animate-scale-in hover:scale-110"
-          >
-            <X className="w-3 h-3" />
-          </button>
-        )}
-      </div>
-    </RevealOnScroll>
+    <div className="flex items-center gap-1 animate-fade-in" style={{ animationDelay: `${delay}ms` }}>
+      <Badge variant={variant} className="gap-1 animate-scale-in">
+        {cropInfo?.nfix && <Leaf className="w-3 h-3 text-green-600" />}
+        {cropInfo?.label || crop}
+        {cropInfo?.water === 'low' && <Droplet className="w-3 h-3 text-blue-600 opacity-50" />}
+      </Badge>
+      {removable && onRemove && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onRemove() }}
+          className="ml-1 p-1 hover:bg-gray-200 rounded transition-colors animate-scale-in hover:scale-110"
+        >
+          <X className="w-3 h-3" />
+        </button>
+      )}
+    </div>
   )
 }
 
-function RotationCard({ rotation, index, onViewDetails, onExport, onSimulate }: { rotation: RotationResult; index: number; onViewDetails: () => void; onExport: () => void; onSimulate: () => void }) {
+function RotationCard({ rotation, index, onViewDetails, onExport }: { rotation: RotationResult; index: number; onViewDetails: () => void; onExport: () => void }) {
   const getScoreColor = (score: number) => {
     if (score >= 80) return 'text-green-600'
     if (score >= 60) return 'text-yellow-600'
@@ -255,115 +241,112 @@ function RotationCard({ rotation, index, onViewDetails, onExport, onSimulate }: 
   }
 
   return (
-    <RevealOnScroll transition="slide-up" delay={index * 80}>
-      <Card variant="elevated" className={cn('overflow-hidden hover-lift', rotation.rank === 1 ? 'border-2 border-yellow-300' : '')} hover>
-        <CardContent className="p-0 animate-fade-in">
-          <div className="flex flex-col md:flex-row">
-            {/* Rank & Score */}
-            <div className={cn('p-6 md:w-48 border-r border-gray-100 md:border-r md:border-b-0 text-center relative', rotation.rank === 1 ? 'bg-gradient-to-b from-yellow-50 to-white' : 'bg-gray-50')}>
-              {rotation.rank === 1 && (
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2 animate-bounce-gentle">
-                  <Trophy className="w-6 h-6 text-yellow-500" />
-                </div>
-              )}
-              <div className="text-4xl font-bold text-gray-900 animate-count-up">{rotation.total_score.toFixed(1)}</div>
-              <Badge variant={rotation.rank <= 3 ? 'success' : 'gray'} className="mt-2 animate-scale-in">
-                #{rotation.rank}
-              </Badge>
-              <p className="text-sm text-gray-500 mt-2">{rotation.years}-year rotation</p>
+    <Card
+      variant="elevated"
+      className={cn('overflow-hidden hover-lift animate-fade-in', rotation.rank === 1 ? 'border-2 border-yellow-300' : '')}
+      hover
+      style={{ animationDelay: `${index * 80}ms` }}
+    >
+      <CardContent className="p-0 animate-fade-in" style={{ animationDelay: '50ms' }}>
+        <div className="flex flex-col md:flex-row">
+          {/* Rank & Score */}
+          <div className={cn('p-6 md:w-48 border-r border-gray-100 md:border-r md:border-b-0 text-center relative', rotation.rank === 1 ? 'bg-gradient-to-b from-yellow-50 to-white' : 'bg-gray-50')}>
+            {rotation.rank === 1 && (
+              <div className="absolute -top-3 left-1/2 -translate-x-1/2 animate-bounce-gentle">
+                <Trophy className="w-6 h-6 text-yellow-500" />
+              </div>
+            )}
+            <div className="text-4xl font-bold text-gray-900 animate-count-up">{rotation.total_score.toFixed(1)}</div>
+            <Badge variant={rotation.rank <= 3 ? 'success' : 'gray'} className="mt-2 animate-scale-in">
+              #{rotation.rank}
+            </Badge>
+            <p className="text-sm text-gray-500 mt-2">{rotation.years}-year rotation</p>
+          </div>
+
+          {/* Sequence */}
+          <div className="flex-1 p-6">
+            <div className="flex items-center gap-2 mb-4 flex-wrap animate-stagger-slide-up">
+              {rotation.sequence.map((crop, i) => {
+                const info = cropOptions.find(c => c.value === crop)
+                return (
+                  <span key={i} className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-gray-100 text-sm font-medium text-gray-700 animate-scale-in hover:bg-gray-200 transition-colors" style={{ animationDelay: `${i * 50}ms` }}>
+                    {info ? (
+                      <>
+                        {info.nfix && <Leaf className="w-3 h-3 text-green-600" />}
+                        {info.label}
+                        {info.water === 'low' && <Droplet className="w-3 h-3 text-blue-600 opacity-50" />}
+                      </>
+                    ) : crop}
+                    {i < rotation.sequence.length - 1 && <ArrowRight className="w-4 h-4 text-gray-400 ml-1" />}
+                  </span>
+                )
+              })}
             </div>
 
-            {/* Sequence */}
-            <div className="flex-1 p-6">
-              <div className="flex items-center gap-2 mb-4 flex-wrap animate-stagger-slide-up">
-                {rotation.sequence.map((crop, i) => {
-                  const info = cropOptions.find(c => c.value === crop)
-                  return (
-                    <span key={i} className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-gray-100 text-sm font-medium text-gray-700 animate-scale-in hover:bg-gray-200 transition-colors" style={{ animationDelay: `${i * 50}ms` }}>
-                      {info ? (
-                        <>
-                          {info.nfix && <Leaf className="w-3 h-3 text-green-600" />}
-                          {info.label}
-                          {info.water === 'low' && <Droplet className="w-3 h-3 text-blue-600 opacity-50" />}
-                        </>
-                      ) : crop}
-                      {i < rotation.sequence.length - 1 && <ArrowRight className="w-4 h-4 text-gray-400 ml-1" />}
-                    </span>
-                  )
-                })}
-              </div>
-
-              {/* Score Breakdown */}
-              <div className="grid grid-cols-2 md:grid-cols-6 gap-3 animate-stagger-slide-up">
-                {Object.entries(rotation.scores).map(([key, score], idx) => {
-                  const priority = priorityOptions.find(p => p.key === key)
-                  return (
-                    <div key={key} className="p-3 rounded-xl bg-gray-50 text-center animate-scale-in hover:bg-gray-100 transition-colors" style={{ animationDelay: `${idx * 40}ms` }}>
-                      <div className="flex items-center justify-center gap-1 mb-1">
-                        {priority?.icon && <priority.icon className="w-4 h-4 text-gray-400" />}
-                        <span className="text-xs text-gray-500">{priority?.label || key}</span>
-                      </div>
-                      <div className={cn('text-2xl font-bold', getScoreColor(score))}>{score}</div>
-                      <div className={cn('h-1.5 rounded-full mt-1', getScoreBg(score))}>
-                        <div className="h-full rounded-full animate-slide-right" style={{ width: `${score}%` }} />
-                      </div>
+            {/* Score Breakdown */}
+            <div className="grid grid-cols-2 md:grid-cols-6 gap-3 animate-stagger-slide-up">
+              {Object.entries(rotation.scores).map(([key, score], idx) => {
+                const priority = priorityOptions.find(p => p.key === key)
+                return (
+                  <div key={key} className="p-3 rounded-xl bg-gray-50 text-center animate-scale-in hover:bg-gray-100 transition-colors" style={{ animationDelay: `${idx * 40}ms` }}>
+                    <div className="flex items-center justify-center gap-1 mb-1">
+                      {priority?.icon && <priority.icon className="w-4 h-4 text-gray-400" />}
+                      <span className="text-xs text-gray-500">{priority?.label || key}</span>
                     </div>
-                  )
-                })}
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div className="p-6 md:w-48 border-l border-gray-100 flex flex-col items-center justify-center gap-2">
-              <Button variant="primary" size="sm" className="w-full hover-lift" onClick={onViewDetails}>
-                View Details
-              </Button>
-              <Button variant="ghost" size="sm" className="w-full hover-lift" onClick={onExport}>
-                <Download className="w-4 h-4 mr-2" />
-                Export
-              </Button>
-              <Button variant="ghost" size="sm" className="w-full text-gray-600 hover-lift" onClick={onSimulate}>
-                <Zap className="w-4 h-4 mr-2" />
-                Simulate
-              </Button>
+                    <div className={cn('text-2xl font-bold', getScoreColor(score))}>{score}</div>
+                    <div className={cn('h-1.5 rounded-full mt-1', getScoreBg(score))}>
+                      <div className="h-full rounded-full animate-slide-right" style={{ width: `${score}%` }} />
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           </div>
-        </CardContent>
-      </Card>
-    </RevealOnScroll>
+
+          {/* Actions */}
+          <div className="p-6 md:w-48 border-l border-gray-100 flex flex-col items-center justify-center gap-2 animate-fade-in" style={{ animationDelay: '100ms' }}>
+            <Button variant="primary" size="sm" className="w-full hover-lift" onClick={onViewDetails}>
+              Voir les détails
+            </Button>
+            <Button variant="ghost" size="sm" className="w-full hover-lift" onClick={onExport}>
+              <Download className="w-4 h-4 mr-2" />
+              Exporter en CSV
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   )
 }
 
 function TemplateCard({ template, index, onUse }: { template: any; index: number; onUse: () => void }) {
   return (
-    <RevealOnScroll transition="slide-up" delay={index * 60}>
-      <Card variant="elevated" className="hover-lift" hover>
-        <CardContent className="p-6 animate-fade-in">
-          <div className="flex items-start justify-between mb-4">
-            <div>
-              <h3 className="font-semibold text-gray-900">{template.name}</h3>
-              <p className="text-sm text-gray-500">{template.desc}</p>
-            </div>
-            <Badge variant="info">{template.years} years</Badge>
+    <Card variant="elevated" className="hover-lift animate-fade-in" hover style={{ animationDelay: `${index * 60}ms` }}>
+      <CardContent className="p-6 animate-fade-in" style={{ animationDelay: '50ms' }}>
+        <div className="flex items-start justify-between mb-4">
+          <div>
+            <h3 className="font-semibold text-gray-900">{template.name}</h3>
+            <p className="text-sm text-gray-500">{template.desc}</p>
           </div>
-          <div className="flex flex-wrap gap-2 mb-4 animate-stagger-slide-up">
-            {template.sequence.map((crop: string, idx: number) => {
-              const info = cropOptions.find(c => c.value === crop)
-              return (
-                <span key={idx} className="px-2 py-1 rounded bg-gray-100 text-xs font-medium text-gray-700 animate-scale-in" style={{ animationDelay: `${idx * 40}ms` }}>
-                  {info?.label || crop}
-                  {idx < template.sequence.length - 1 && <ArrowRight className="w-3 h-3 ml-1 inline-block" />}
-                </span>
-              )
-            })}
-          </div>
-          <Button variant="ghost" size="sm" className="w-full hover-lift" onClick={onUse}>
-            <Plus className="w-4 h-4 mr-2" />
-            Use This Template
-          </Button>
-        </CardContent>
-      </Card>
-    </RevealOnScroll>
+          <Badge variant="info">{template.years} years</Badge>
+        </div>
+        <div className="flex flex-wrap gap-2 mb-4 animate-stagger-slide-up">
+          {template.sequence.map((crop: string, idx: number) => {
+            const info = cropOptions.find(c => c.value === crop)
+            return (
+              <span key={idx} className="px-2 py-1 rounded bg-gray-100 text-xs font-medium text-gray-700 animate-scale-in" style={{ animationDelay: `${idx * 40}ms` }}>
+                {info?.label || crop}
+                {idx < template.sequence.length - 1 && <ArrowRight className="w-3 h-3 ml-1 inline-block" />}
+              </span>
+            )
+          })}
+        </div>
+        <Button variant="ghost" size="sm" className="w-full hover-lift" onClick={onUse}>
+          <Plus className="w-4 h-4 mr-2" />
+          Utiliser ce modèle
+        </Button>
+      </CardContent>
+    </Card>
   )
 }
 
@@ -388,6 +371,7 @@ export default function RotationPlanner({ farmId }: { farmId?: string }) {
     maxResults: 10,
   })
   const [rotations, setRotations] = useState<RotationResult[]>([])
+  const [selectedRotation, setSelectedRotation] = useState<RotationResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [activeTab, setActiveTab] = useState('results')
   const [selectedFarm, setSelectedFarm] = useState<Farm | null>(null)
@@ -428,6 +412,23 @@ export default function RotationPlanner({ farmId }: { farmId?: string }) {
       selectFarm(null)
     }
   }, [farms, selectedFarmId, selectFarm, farmId])
+
+  const exportRotation = (rotation: RotationResult) => downloadCsv(
+    `rotation-${rotation.rank}.csv`,
+    ['Rang', 'Durée (années)', 'Séquence', 'Score total', 'Gestion de l’eau', 'Santé du sol', 'Rentabilité', 'Gestion des ravageurs', 'Résilience climatique', 'Diversification'],
+    [[
+      rotation.rank,
+      rotation.years,
+      rotation.sequence.map((crop) => cropOptions.find((option) => option.value === crop)?.label || crop).join(' → '),
+      rotation.total_score,
+      rotation.scores.water_conservation,
+      rotation.scores.soil_health,
+      rotation.scores.profitability,
+      rotation.scores.pest_management,
+      rotation.scores.climate_resilience,
+      rotation.scores.diversification,
+    ]],
+  )
 
   const handleOptimize = async () => {
     if (!selectedFarm) {
@@ -503,320 +504,349 @@ export default function RotationPlanner({ farmId }: { farmId?: string }) {
   return (
     <AnimatedPage className="space-y-6">
       {/* Header */}
-      <RevealOnScroll transition="slide-up" delay={50}>
-        <PageHero
-          kicker="CropShift"
-          title="Plan de rotation"
-          subtitle="Plusieurs rotations classées selon le sol, l'eau et le revenu."
-          actions={
-            <Button onClick={handleOptimize} loading={loading} disabled={!selectedFarm || loading} className="hover-lift">
-              <RefreshCw className="w-4 h-4 mr-2" />
-              Optimize Rotations
-            </Button>
-          }
-        />
-      </RevealOnScroll>
+      <PageHero
+        kicker="CropShift"
+        title="Plan de rotation"
+        subtitle="Plusieurs rotations classées selon le sol, l'eau et le revenu."
+        actions={
+          <Button onClick={handleOptimize} loading={loading} disabled={!selectedFarm || loading} className="hover-lift">
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Optimize Rotations
+          </Button>
+        }
+      />
 
       {/* Configuration */}
-      <RevealOnScroll transition="slide-up" delay={100}>
-        <Card variant="elevated" className="border-l-4 border-l-primary-500 hover-lift">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Settings className="w-5 h-5 text-primary-600" />
-              Configuration
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-6 animate-fade-in">
-            {selectedFarm && (
-              <div className="p-3 rounded-lg bg-green-50 border border-green-200 animate-slide-up">
-                <p className="text-sm font-medium text-green-800">Planning for: {selectedFarm.name}</p>
-                <p className="text-xs text-green-700">Current crops auto-filled from farm data</p>
-              </div>
-            )}
+      <Card variant="elevated" className="border-l-4 border-l-primary-500 hover-lift animate-fade-in" style={{ animationDelay: '100ms' }}>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Settings className="w-5 h-5 text-primary-600" />
+            Configuration
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-6 animate-fade-in">
+          {selectedFarm && (
+            <div className="p-3 rounded-lg bg-green-50 border border-green-200 animate-slide-up">
+              <p className="text-sm font-medium text-green-800">Planning for: {selectedFarm.name}</p>
+              <p className="text-xs text-green-700">Current crops auto-filled from farm data</p>
+            </div>
+          )}
 
-            {/* Current Crops */}
+          {/* Current Crops */}
+          <div>
+            <label className="label mb-2">Current Crops (to diversify from)</label>
+            <div className="flex flex-wrap gap-2 animate-stagger-slide-up">
+              {formData.currentCrops.map((crop, i) => (
+                <CropBadge key={i} crop={crop} variant="default" removable onRemove={() => removeCurrentCrop(crop)} delay={i * 40} />
+              ))}
+              <Select
+                placeholder="Add crop..."
+                value={'' as string}
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
+                  const val = e.target.value as string
+                  if (val && !formData.currentCrops.includes(val)) {
+                    setFormData({...formData, currentCrops: [...formData.currentCrops, val]})
+                    e.target.value = ''
+                  }
+                }}
+                options={cropOptions.filter(c => !formData.currentCrops.includes(c.value)).map(c => ({ value: c.value, label: c.label }))}
+                className="w-auto hover-lift"
+              />
+            </div>
+          </div>
+
+          {/* Excluded/Required Crops */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <label className="label mb-2">Current Crops (to diversify from)</label>
+              <label className="label mb-2">Excluded Crops</label>
               <div className="flex flex-wrap gap-2 animate-stagger-slide-up">
-                {formData.currentCrops.map((crop, i) => (
-                  <CropBadge key={i} crop={crop} variant="default" removable onRemove={() => removeCurrentCrop(crop)} delay={i * 40} />
+                {formData.excludedCrops.map((crop, i) => (
+                  <CropBadge key={i} crop={crop} variant="gray" removable onRemove={() => removeExcludedCrop(crop)} delay={i * 40} />
                 ))}
                 <Select
-                  placeholder="Add crop..."
+                  placeholder="Add excluded..."
                   value={'' as string}
                   onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
                     const val = e.target.value as string
-                    if (val && !formData.currentCrops.includes(val)) {
-                      setFormData({...formData, currentCrops: [...formData.currentCrops, val]})
+                    if (val && !formData.excludedCrops.includes(val)) {
+                      setFormData({...formData, excludedCrops: [...formData.excludedCrops, val]})
                       e.target.value = ''
                     }
                   }}
-                  options={cropOptions.filter(c => !formData.currentCrops.includes(c.value)).map(c => ({ value: c.value, label: c.label }))}
+                  options={cropOptions.filter(c => !formData.excludedCrops.includes(c.value)).map(c => ({ value: c.value, label: c.label }))}
                   className="w-auto hover-lift"
                 />
               </div>
             </div>
-
-            {/* Excluded/Required Crops */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label className="label mb-2">Excluded Crops</label>
-                <div className="flex flex-wrap gap-2 animate-stagger-slide-up">
-                  {formData.excludedCrops.map((crop, i) => (
-                    <CropBadge key={i} crop={crop} variant="gray" removable onRemove={() => removeExcludedCrop(crop)} delay={i * 40} />
-                  ))}
-                  <Select
-                    placeholder="Add excluded..."
-                    value={'' as string}
-                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
-                      const val = e.target.value as string
-                      if (val && !formData.excludedCrops.includes(val)) {
-                        setFormData({...formData, excludedCrops: [...formData.excludedCrops, val]})
-                        e.target.value = ''
-                      }
-                    }}
-                    options={cropOptions.filter(c => !formData.excludedCrops.includes(c.value)).map(c => ({ value: c.value, label: c.label }))}
-                    className="w-auto hover-lift"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="label mb-2">Required Crops</label>
-                <div className="flex flex-wrap gap-2 animate-stagger-slide-up">
-                  {formData.requiredCrops.map((crop, i) => (
-                    <CropBadge key={i} crop={crop} variant="info" removable onRemove={() => removeRequiredCrop(crop)} delay={i * 40} />
-                  ))}
-                  <Select
-                    placeholder="Add required..."
-                    value={'' as string}
-                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
-                      const val = e.target.value as string
-                      if (val && !formData.requiredCrops.includes(val)) {
-                        setFormData({...formData, requiredCrops: [...formData.requiredCrops, val]})
-                        e.target.value = ''
-                      }
-                    }}
-                    options={cropOptions.filter(c => !formData.requiredCrops.includes(c.value)).map(c => ({ value: c.value, label: c.label }))}
-                    className="w-auto hover-lift"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Priorities */}
             <div>
-              <label className="label flex items-center justify-between mb-2">
-                Farmer Priorities (weights sum to 100%)
-                <span className="text-sm text-gray-500">
-                  Total: {Math.round(Object.values(formData.priorities).reduce((a,b) => a+b, 0) * 100)}%
-                </span>
-              </label>
-              <StaggeredContainer staggerDelay={60} transition="stagger-slide-up" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-                {priorityOptions.map((p, i) => (
-                  <PrioritySlider
-                    key={p.key}
-                    priority={p}
-                    value={formData.priorities[p.key as keyof typeof formData.priorities]}
-                    onChange={(v) => handlePriorityChange(p.key, v)}
-                    delay={i * 40}
-                  />
+              <label className="label mb-2">Required Crops</label>
+              <div className="flex flex-wrap gap-2 animate-stagger-slide-up">
+                {formData.requiredCrops.map((crop, i) => (
+                  <CropBadge key={i} crop={crop} variant="info" removable onRemove={() => removeRequiredCrop(crop)} delay={i * 40} />
                 ))}
-              </StaggeredContainer>
-            </div>
-
-            {/* Other Settings */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <RevealOnScroll transition="slide-up" delay={0}>
                 <Select
-                  label="Climate Zone"
-                  value={formData.climateZone}
-                  onChange={(e) => setFormData({...formData, climateZone: e.target.value})}
-                  options={climateZones}
-                  className="hover-lift"
+                  placeholder="Add required..."
+                  value={'' as string}
+                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
+                    const val = e.target.value as string
+                    if (val && !formData.requiredCrops.includes(val)) {
+                      setFormData({...formData, requiredCrops: [...formData.requiredCrops, val]})
+                      e.target.value = ''
+                    }
+                  }}
+                  options={cropOptions.filter(c => !formData.requiredCrops.includes(c.value)).map(c => ({ value: c.value, label: c.label }))}
+                  className="w-auto hover-lift"
                 />
-              </RevealOnScroll>
-              <RevealOnScroll transition="slide-up" delay={60}>
-                <Select
-                  label="Soil Type"
-                  value={formData.soilType}
-                  onChange={(e) => setFormData({...formData, soilType: e.target.value})}
-                  options={soilTypes}
-                  className="hover-lift"
-                />
-              </RevealOnScroll>
-              <RevealOnScroll transition="slide-up" delay={120}>
-                <Input
-                  label="Min Rotation Years"
-                  type="number"
-                  min="2"
-                  max="7"
-                  value={formData.minYears}
-                  onChange={(e) => setFormData({...formData, minYears: parseInt(e.target.value)})}
-                  className="hover-lift"
-                />
-              </RevealOnScroll>
-              <RevealOnScroll transition="slide-up" delay={180}>
-                <Input
-                  label="Max Rotation Years"
-                  type="number"
-                  min="3"
-                  max="10"
-                  value={formData.maxYears}
-                  onChange={(e) => setFormData({...formData, maxYears: parseInt(e.target.value)})}
-                  className="hover-lift"
-                />
-              </RevealOnScroll>
+              </div>
             </div>
+          </div>
 
-            <div className="flex gap-2 animate-fade-in">
-              <Button onClick={handleOptimize} loading={loading} className="flex-1 hover-lift" disabled={!selectedFarm || loading}>
-                <RefreshCw className="w-4 h-4 mr-2" />
-                Find Optimal Rotations
-              </Button>
-              <Button variant="secondary" className="hover-lift">Save as Template</Button>
+          {/* Priorities */}
+          <div>
+            <label className="label flex items-center justify-between mb-2">
+              Farmer Priorities (weights sum to 100%)
+              <span className="text-sm text-gray-500">
+                Total: {Math.round(Object.values(formData.priorities).reduce((a,b) => a+b, 0) * 100)}%
+              </span>
+            </label>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 animate-stagger-slide-up">
+              {priorityOptions.map((p, i) => (
+                <PrioritySlider
+                  key={p.key}
+                  priority={p}
+                  value={formData.priorities[p.key as keyof typeof formData.priorities]}
+                  onChange={(v) => handlePriorityChange(p.key, v)}
+                  delay={i * 40}
+                />
+              ))}
             </div>
-          </CardContent>
-        </Card>
-      </RevealOnScroll>
+          </div>
+
+          {/* Other Settings */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 animate-stagger-slide-up">
+            <Select
+              label="Climate Zone"
+              value={formData.climateZone}
+              onChange={(e) => setFormData({...formData, climateZone: e.target.value})}
+              options={climateZones}
+              className="hover-lift animate-fade-in"
+              style={{ animationDelay: '0ms' }}
+            />
+            <Select
+              label="Soil Type"
+              value={formData.soilType}
+              onChange={(e) => setFormData({...formData, soilType: e.target.value})}
+              options={soilTypes}
+              className="hover-lift animate-fade-in"
+              style={{ animationDelay: '60ms' }}
+            />
+            <Input
+              label="Min Rotation Years"
+              type="number"
+              min="2"
+              max="7"
+              value={formData.minYears}
+              onChange={(e) => setFormData({...formData, minYears: parseInt(e.target.value)})}
+              className="hover-lift animate-fade-in"
+              style={{ animationDelay: '120ms' }}
+            />
+            <Input
+              label="Max Rotation Years"
+              type="number"
+              min="3"
+              max="10"
+              value={formData.maxYears}
+              onChange={(e) => setFormData({...formData, maxYears: parseInt(e.target.value)})}
+              className="hover-lift animate-fade-in"
+              style={{ animationDelay: '180ms' }}
+            />
+          </div>
+
+          <div className="flex gap-2 animate-fade-in" style={{ animationDelay: '200ms' }}>
+            <Button onClick={handleOptimize} loading={loading} className="flex-1 hover-lift" disabled={!selectedFarm || loading}>
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Find Optimal Rotations
+            </Button>
+            <Button variant="secondary" className="hover-lift">Save as Template</Button>
+          </div>
+        </CardContent>
+      </Card>
 
       {error && (
-        <RevealOnScroll transition="shake" delay={150}>
-          <Card variant="outlined" className="border-red-200 bg-red-50 animate-shake">
-            <CardContent className="p-4 flex items-center gap-3 text-red-700">
-              <AlertTriangle className="w-5 h-5" />
-              <span>{error}</span>
-              <Button variant="ghost" size="sm" onClick={handleOptimize} className="ml-auto hover-lift">
-                <RefreshCw className="w-4 h-4 mr-1" />
-                Réessayer
-              </Button>
-            </CardContent>
-          </Card>
-        </RevealOnScroll>
+        <Card variant="outlined" className="border-red-200 bg-red-50 animate-shake animate-fade-in" style={{ animationDelay: '150ms' }}>
+          <CardContent className="p-4 flex items-center gap-3 text-red-700">
+            <AlertTriangle className="w-5 h-5" />
+            <span>{error}</span>
+            <Button variant="ghost" size="sm" onClick={handleOptimize} className="ml-auto hover-lift">
+              <RefreshCw className="w-4 h-4 mr-1" />
+              Réessayer
+            </Button>
+          </CardContent>
+        </Card>
       )}
 
       {/* Quick Stats when results exist */}
       {rotations.length > 0 && showResults && (
-        <RevealOnScroll transition="slide-up" delay={200}>
-          <StaggeredContainer staggerDelay={80} transition="stagger-slide-up" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-            <StatMetricCard icon={Trophy} iconBg="bg-yellow-600" label="Best Score" value={rotations[0].total_score.toFixed(1)} delay={0} trend={10} />
-            <StatMetricCard icon={GitBranch} iconBg="bg-blue-600" label="Rotations Found" value={rotations.length} delay={80} />
-            <StatMetricCard icon={Layers} iconBg="bg-purple-600" label="Avg Years" value={(rotations.reduce((a,b) => a + b.years, 0) / rotations.length).toFixed(1)} delay={160} />
-            <StatMetricCard icon={BarChart3} iconBg="bg-green-600" label="Avg Diversification" value={Math.round(rotations.reduce((a,b) => a + b.scores.diversification, 0) / rotations.length)} delay={240} trend={5} />
-            <StatMetricCard icon={Target} iconBg="bg-red-600" label="Avg Resilience" value={Math.round(rotations.reduce((a,b) => a + b.scores.climate_resilience, 0) / rotations.length)} delay={320} />
-          </StaggeredContainer>
-        </RevealOnScroll>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 animate-stagger-slide-up" style={{ animationDelay: '200ms' }}>
+          <StatMetricCard icon={Trophy} iconBg="bg-yellow-600" label="Best Score" value={rotations[0].total_score.toFixed(1)} delay={0} trend={10} />
+          <StatMetricCard icon={GitBranch} iconBg="bg-blue-600" label="Rotations Found" value={rotations.length} delay={80} />
+          <StatMetricCard icon={Layers} iconBg="bg-purple-600" label="Avg Years" value={(rotations.reduce((a,b) => a + b.years, 0) / rotations.length).toFixed(1)} delay={160} />
+          <StatMetricCard icon={BarChart3} iconBg="bg-green-600" label="Avg Diversification" value={Math.round(rotations.reduce((a,b) => a + b.scores.diversification, 0) / rotations.length)} delay={240} trend={5} />
+          <StatMetricCard icon={Target} iconBg="bg-red-600" label="Avg Resilience" value={Math.round(rotations.reduce((a,b) => a + b.scores.climate_resilience, 0) / rotations.length)} delay={320} />
+        </div>
       )}
 
       {/* Tabs */}
-      <RevealOnScroll transition="slide-up" delay={showResults ? 250 : 1100}>
-        <Tabs defaultValue="results" onChange={setActiveTab} className="w-full" animated transition="fade">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="results" icon={<Layers className="w-4 h-4" />}>Results ({rotations.length})</TabsTrigger>
-            <TabsTrigger value="comparison" icon={<BarChart3 className="w-4 h-4" />}>Compare</TabsTrigger>
-            <TabsTrigger value="templates" icon={<BookOpen className="w-4 h-4" />}>Templates</TabsTrigger>
-          </TabsList>
+      <Tabs defaultValue="results" onChange={setActiveTab} className="w-full" animated transition="slide">
+        <TabsList className="grid w-full grid-cols-3 animate-fade-in">
+          <TabsTrigger value="results" icon={<Layers className="w-4 h-4" />}>Results ({rotations.length})</TabsTrigger>
+          <TabsTrigger value="comparison" icon={<BarChart3 className="w-4 h-4" />}>Compare</TabsTrigger>
+          <TabsTrigger value="templates" icon={<BookOpen className="w-4 h-4" />}>Templates</TabsTrigger>
+        </TabsList>
 
-          {/* Results Tab */}
-          <TabsContent value="results" transition="fade">
-            <div className="mt-4 animate-fade-in">
-              {rotations.length > 0 ? (
-                <StaggeredContainer staggerDelay={100} transition="stagger-slide-up" className="space-y-4">
-                  {rotations.map((rotation, i) => (
-                    <RotationCard
-                      key={rotation.rank}
-                      rotation={rotation}
-                      index={i}
-                      onViewDetails={() => alert(rotation.details || 'Details coming soon')}
-                      onExport={() => {}}
-                      onSimulate={() => {}}
-                    />
-                  ))}
-                </StaggeredContainer>
-              ) : (
-                <Card variant="elevated" className="hover-lift">
-                  <CardContent className="p-12 text-center animate-fade-in">
-                    <GitBranch className="w-12 h-12 mx-auto mb-4 text-gray-300 animate-float" />
-                    <h3 className="text-lg font-semibold text-gray-900 mb-1">No Rotations Generated Yet</h3>
-                    <p className="text-gray-500">Configure your preferences and click "Optimize Rotations"</p>
-                  </CardContent>
-                </Card>
-              )}
-            </div>
-          </TabsContent>
-
-          {/* Comparison Tab */}
-          <TabsContent value="comparison" transition="fade">
-            <div className="mt-4 animate-fade-in">
-              {rotations.length > 0 ? (
-                <ChartCard title="Side-by-Side Comparison" subtitle="Top 5 rotations compared across all metrics" icon={<BarChart3 className="w-5 h-5" />} delay={0}>
-                  <div className="overflow-x-auto animate-fade-in">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="text-left text-gray-500 border-b border-gray-200">
-                          <th className="pb-2 font-medium">Metric</th>
-                          {rotations.slice(0, 5).map((r) => (
-                            <th key={r.rank} className="pb-2 font-medium text-center">#{r.rank} ({r.total_score.toFixed(1)})</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {Object.keys(rotations[0].scores).map((key) => {
-                          const priority = priorityOptions.find(p => p.key === key)
-                          return (
-                            <tr key={key} className="border-b border-gray-100 hover:bg-gray-50 animate-fade-in">
-                              <td className="py-3 font-medium flex items-center gap-2">
-                                {priority?.icon && <priority.icon className="w-4 h-4 text-gray-400" />}
-                                {priority?.label || key}
-                              </td>
-                              {rotations.slice(0, 5).map((r) => (
-                                <td key={r.rank} className="py-3 text-center font-semibold" style={{ color: getScoreColor(r.scores[key as keyof typeof r.scores]) }}>
-                                  {r.scores[key as keyof typeof r.scores]}
-                                </td>
-                              ))}
-                            </tr>
-                          )
-                        })}
-                        <tr className="bg-gray-50 font-bold animate-slide-up">
-                          <td className="py-3">Total Score</td>
-                          {rotations.slice(0, 5).map((r) => (
-                            <td key={r.rank} className="py-3 text-center text-lg text-primary-600">{r.total_score.toFixed(1)}</td>
-                          ))}
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </ChartCard>
-              ) : (
-                <Card variant="elevated" className="hover-lift">
-                  <CardContent className="p-12 text-center animate-fade-in">
-                    <BarChart3 className="w-12 h-12 mx-auto text-gray-300 mb-4 animate-float" />
-                    <h3 className="text-lg font-semibold text-gray-900 mb-1">Run Optimization to See Comparison</h3>
-                    <p className="text-gray-500">Generate rotations first to compare them side by side</p>
-                  </CardContent>
-                </Card>
-              )}
-            </div>
-          </TabsContent>
-
-          {/* Templates Tab */}
-          <TabsContent value="templates" transition="fade">
-            <div className="mt-4 animate-fade-in">
-              <StaggeredContainer staggerDelay={80} transition="stagger-slide-up" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {[
-                  { name: 'Classic Corn-Soybean', sequence: ['corn', 'soybean'], years: 2, desc: 'Standard 2-year Midwest rotation' },
-                  { name: 'Corn-Soybean-Wheat', sequence: ['corn', 'soybean', 'wheat'], years: 3, desc: '3-year rotation with winter wheat' },
-                  { name: 'Corn-Soybean-Wheat-Alfalfa', sequence: ['corn', 'soybean', 'wheat', 'alfalfa', 'alfalfa'], years: 5, desc: '5-year with perennial forage' },
-                  { name: 'Diverse Vegetable Rotation', sequence: ['tomato', 'pea', 'broccoli', 'bean', 'lettuce', 'spinach'], years: 6, desc: '6-year intensive vegetable rotation' },
-                  { name: 'Cover Crop Intensive', sequence: ['corn', 'rye', 'soybean', 'radish', 'wheat', 'clover'], years: 6, desc: '6-year with cover crops every other year' },
-                  { name: 'Dryland Resilient', sequence: ['sorghum', 'millet', 'chickpea', 'sunflower'], years: 4, desc: '4-year low-water rotation' },
-                ].map((template, i) => (
-                  <TemplateCard key={i} template={template} index={i} onUse={() => {}} />
+        {/* Results Tab */}
+        <TabsContent value="results" transition="slide">
+          <div className="mt-4 animate-fade-in">
+            {rotations.length > 0 ? (
+              <div className="space-y-4 animate-stagger-slide-up">
+                {rotations.map((rotation, i) => (
+                  <RotationCard
+                    key={rotation.rank}
+                    rotation={rotation}
+                    index={i}
+                    onViewDetails={() => setSelectedRotation(rotation)}
+                    onExport={() => exportRotation(rotation)}
+                  />
                 ))}
-              </StaggeredContainer>
+              </div>
+            ) : (
+              <Card variant="elevated" className="hover-lift animate-fade-in">
+                <CardContent className="p-12 text-center animate-fade-in">
+                  <GitBranch className="w-12 h-12 mx-auto mb-4 text-gray-300 animate-float" />
+                  <h3 className="text-lg font-semibold text-gray-900 mb-1">No Rotations Generated Yet</h3>
+                  <p className="text-gray-500">Configure your preferences and click "Optimize Rotations"</p>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </TabsContent>
+
+        {/* Comparison Tab */}
+        <TabsContent value="comparison" transition="slide">
+          <div className="mt-4 animate-fade-in">
+            {rotations.length > 0 ? (
+              <ChartCard title="Side-by-Side Comparison" subtitle="Top 5 rotations compared across all metrics" icon={<BarChart3 className="w-5 h-5" />} delay={0}>
+                <div className="overflow-x-auto animate-fade-in">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-gray-500 border-b border-gray-200">
+                        <th className="pb-2 font-medium">Metric</th>
+                        {rotations.slice(0, 5).map((r) => (
+                          <th key={r.rank} className="pb-2 font-medium text-center">#{r.rank} ({r.total_score.toFixed(1)})</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Object.keys(rotations[0].scores).map((key) => {
+                        const priority = priorityOptions.find(p => p.key === key)
+                        return (
+                          <tr key={key} className="border-b border-gray-100 hover:bg-gray-50 animate-fade-in">
+                            <td className="py-3 font-medium flex items-center gap-2">
+                              {priority?.icon && <priority.icon className="w-4 h-4 text-gray-400" />}
+                              {priority?.label || key}
+                            </td>
+                            {rotations.slice(0, 5).map((r) => (
+                              <td key={r.rank} className="py-3 text-center font-semibold" style={{ color: getScoreColor(r.scores[key as keyof typeof r.scores]) }}>
+                                {r.scores[key as keyof typeof r.scores]}
+                              </td>
+                            ))}
+                          </tr>
+                        )
+                      })}
+                      <tr className="bg-gray-50 font-bold animate-slide-up">
+                        <td className="py-3">Total Score</td>
+                        {rotations.slice(0, 5).map((r) => (
+                          <td key={r.rank} className="py-3 text-center text-lg text-primary-600">{r.total_score.toFixed(1)}</td>
+                        ))}
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </ChartCard>
+            ) : (
+              <Card variant="elevated" className="hover-lift animate-fade-in">
+                <CardContent className="p-12 text-center animate-fade-in">
+                  <BarChart3 className="w-12 h-12 mx-auto text-gray-300 mb-4 animate-float" />
+                  <h3 className="text-lg font-semibold text-gray-900 mb-1">Run Optimization to See Comparison</h3>
+                  <p className="text-gray-500">Generate rotations first to compare them side by side</p>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </TabsContent>
+
+        {/* Templates Tab */}
+        <TabsContent value="templates" transition="slide">
+          <div className="mt-4 animate-fade-in">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 animate-stagger-slide-up">
+              {[
+                { name: 'Classic Corn-Soybean', sequence: ['corn', 'soybean'], years: 2, desc: 'Standard 2-year Midwest rotation' },
+                { name: 'Corn-Soybean-Wheat', sequence: ['corn', 'soybean', 'wheat'], years: 3, desc: '3-year rotation with winter wheat' },
+                { name: 'Corn-Soybean-Wheat-Alfalfa', sequence: ['corn', 'soybean', 'wheat', 'alfalfa', 'alfalfa'], years: 5, desc: '5-year with perennial forage' },
+                { name: 'Diverse Vegetable Rotation', sequence: ['tomato', 'pea', 'broccoli', 'bean', 'lettuce', 'spinach'], years: 6, desc: '6-year intensive vegetable rotation' },
+                { name: 'Cover Crop Intensive', sequence: ['corn', 'rye', 'soybean', 'radish', 'wheat', 'clover'], years: 6, desc: '6-year with cover crops every other year' },
+                { name: 'Dryland Resilient', sequence: ['sorghum', 'millet', 'chickpea', 'sunflower'], years: 4, desc: '4-year low-water rotation' },
+              ].map((template, i) => (
+                <TemplateCard
+                  key={i}
+                  template={template}
+                  index={i}
+                  onUse={() => {
+                    setFormData((current) => ({ ...current, currentCrops: template.sequence, minYears: template.years, maxYears: template.years }))
+                    addToast({ type: 'success', title: 'Modèle appliqué', message: 'Vérifiez les paramètres puis lancez l’optimisation.' })
+                  }}
+                />
+              ))}
             </div>
-          </TabsContent>
-        </Tabs>
-      </RevealOnScroll>
+          </div>
+        </TabsContent>
+      </Tabs>
+
+      {selectedRotation && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setSelectedRotation(null)}>
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="rotation-detail-title"
+            className="w-full max-w-2xl rounded-xl bg-white p-6 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 id="rotation-detail-title" className="text-xl font-semibold text-gray-900">Rotation classée n°{selectedRotation.rank}</h2>
+                <p className="mt-1 text-sm text-gray-500">{selectedRotation.years} ans · Score global {selectedRotation.total_score.toFixed(1)}/100</p>
+              </div>
+              <Button variant="ghost" size="sm" onClick={() => setSelectedRotation(null)} aria-label="Fermer les détails"><X className="h-4 w-4" /></Button>
+            </div>
+            <div className="mt-5">
+              <h3 className="text-sm font-medium text-gray-700">Séquence culturale</h3>
+              <p className="mt-1 text-gray-900">{selectedRotation.sequence.map((crop) => cropOptions.find((option) => option.value === crop)?.label || crop).join(' → ')}</p>
+            </div>
+            <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {Object.entries(selectedRotation.scores).map(([key, score]) => (
+                <div key={key} className="rounded-lg border border-gray-200 p-3">
+                  <p className="text-xs text-gray-500">{priorityOptions.find((option) => option.key === key)?.label || key}</p>
+                  <p className="mt-1 text-lg font-semibold text-gray-900">{score}/100</p>
+                </div>
+              ))}
+            </div>
+            {selectedRotation.details && <p className="mt-4 text-sm leading-6 text-gray-600">{selectedRotation.details}</p>}
+            <div className="mt-6 flex justify-end">
+              <Button variant="secondary" onClick={() => setSelectedRotation(null)}>Fermer</Button>
+            </div>
+          </section>
+        </div>
+      )}
     </AnimatedPage>
   )
 }

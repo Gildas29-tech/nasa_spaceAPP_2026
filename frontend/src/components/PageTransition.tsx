@@ -1,5 +1,6 @@
-import { ReactNode, useEffect, useState } from 'react'
+import { ReactNode, useEffect, useState, useRef } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
+import { cn } from '../lib/utils'
 
 interface PageTransitionProps {
   children?: ReactNode
@@ -101,7 +102,7 @@ export function AnimatedPage({
   )
 }
 
-// Staggered children wrapper
+// Staggered children wrapper - CSS-based animations (no IntersectionObserver)
 export function StaggeredContainer({
   children,
   staggerDelay = 100,
@@ -141,15 +142,16 @@ export function StaggeredContainer({
   )
 }
 
-// Reveal on scroll component
+// Reveal on scroll component - with fallback for hidden content (tabs)
 export function RevealOnScroll({
   children,
-  threshold = 0.1,
+  threshold = 0,
   rootMargin = '0px',
   transition = 'slide-up',
   delay = 0,
   once = true,
   className,
+  fallbackDelay = 300, // Delay before showing if IntersectionObserver fails (e.g., in hidden tabs)
   ...props
 }: {
   children: ReactNode
@@ -159,16 +161,31 @@ export function RevealOnScroll({
   delay?: number
   once?: boolean
   className?: string
+  fallbackDelay?: number
 }) {
   const [isVisible, setIsVisible] = useState(false)
   const elementRef = useRef<HTMLDivElement>(null)
+  const observerRef = useRef<IntersectionObserver | null>(null)
+  const fallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
+    // Set up fallback timer in case element is never observed (hidden in tabs)
+    fallbackTimerRef.current = setTimeout(() => {
+      if (!isVisible) {
+        setIsVisible(true)
+      }
+    }, fallbackDelay)
+
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
           setTimeout(() => setIsVisible(true), delay)
-          if (once) observer.unobserve(entry.target)
+          if (once) {
+            observer.unobserve(entry.target)
+            if (fallbackTimerRef.current) {
+              clearTimeout(fallbackTimerRef.current)
+            }
+          }
         } else if (!once) {
           setIsVisible(false)
         }
@@ -176,12 +193,19 @@ export function RevealOnScroll({
       { threshold, rootMargin }
     )
 
+    observerRef.current = observer
+
     if (elementRef.current) {
       observer.observe(elementRef.current)
     }
 
-    return () => observer.disconnect()
-  }, [threshold, rootMargin, delay, once])
+    return () => {
+      observer.disconnect()
+      if (fallbackTimerRef.current) {
+        clearTimeout(fallbackTimerRef.current)
+      }
+    }
+  }, [threshold, rootMargin, delay, once, fallbackDelay, isVisible])
 
   const transitions = {
     'fade-in': 'animate-fade-in',
@@ -211,6 +235,3 @@ export function RevealOnScroll({
   )
 }
 
-// Import for cn
-import { cn } from '../lib/utils'
-import { useRef } from 'react'

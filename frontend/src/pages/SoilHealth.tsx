@@ -30,7 +30,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '../components/ui/Tabs'
 import { api } from '../lib/api'
 import { useFarmStore, type Farm } from '../stores/farmStore'
 import { useUIStore } from '../stores/uiStore'
-import { AnimatedPage, RevealOnScroll, StaggeredContainer } from '../components/PageTransition'
+import { AnimatedPage } from '../components/PageTransition'
 import { Skeleton, CardSkeleton, StatCardSkeleton, ChartSkeleton, TableSkeleton } from '../components/ui/Skeleton'
 
 const soilTextureOptions = [
@@ -104,23 +104,17 @@ function SoilHealthSkeleton() {
     <AnimatedPage>
       <div className="space-y-6 animate-fade-in">
         <PageHero kicker="NASA Earth observations" title="Santé du sol" subtitle="Un score du sol à partir de l'humidité, de la végétation et du climat." />
-
-        <RevealOnScroll transition="slide-up" delay={100}>
-          <CardSkeleton className="animate-stagger-slide-up" />
-        </RevealOnScroll>
-
-        <RevealOnScroll transition="slide-up" delay={200}>
-          <StaggeredContainer staggerDelay={80} transition="stagger-slide-up">
-            <StatCardSkeleton />
-            <StatCardSkeleton />
-            <StatCardSkeleton />
-            <StatCardSkeleton />
-            <StatCardSkeleton />
-            <StatCardSkeleton />
-            <StatCardSkeleton />
-            <StatCardSkeleton />
-          </StaggeredContainer>
-        </RevealOnScroll>
+        <CardSkeleton className="animate-fade-in" style={{ animationDelay: '100ms' }} />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-8 gap-4 animate-fade-in" style={{ animationDelay: '200ms' }}>
+          <StatCardSkeleton />
+          <StatCardSkeleton />
+          <StatCardSkeleton />
+          <StatCardSkeleton />
+          <StatCardSkeleton />
+          <StatCardSkeleton />
+          <StatCardSkeleton />
+          <StatCardSkeleton />
+        </div>
       </div>
     </AnimatedPage>
   )
@@ -128,22 +122,20 @@ function SoilHealthSkeleton() {
 
 function ChartCard({ title, subtitle, icon, children, className, delay = 0, ...props }: any) {
   return (
-    <RevealOnScroll transition="slide-up" delay={delay} key={title}>
-      <Card variant="elevated" className={cn('hover-lift', className)} {...props}>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            {icon && <span className="p-1.5 rounded-lg bg-primary-100 text-primary-600">{icon}</span>}
-            <div>
-              <span>{title}</span>
-              {subtitle && <p className="text-xs text-gray-500 mt-0.5">{subtitle}</p>}
-            </div>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="animate-fade-in" style={{ animationDelay: '100ms' }}>
-          {children}
-        </CardContent>
-      </Card>
-    </RevealOnScroll>
+    <Card variant="elevated" className={cn('hover-lift', className)} {...props} style={{ animationDelay: `${delay}ms` }}>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          {icon && <span className="p-1.5 rounded-lg bg-primary-100 text-primary-600">{icon}</span>}
+          <div>
+            <span>{title}</span>
+            {subtitle && <p className="text-xs text-gray-500 mt-0.5">{subtitle}</p>}
+          </div>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="animate-fade-in" style={{ animationDelay: '100ms' }}>
+        {children}
+      </CardContent>
+    </Card>
   )
 }
 
@@ -152,45 +144,43 @@ function FactorCard({ factor, score, percentile, confidence, delay = 0 }: { fact
   const statusLabel = score >= 80 ? 'Optimal' : score >= 60 ? 'Needs attention' : 'Critical'
 
   return (
-    <RevealOnScroll transition="scale-in" delay={delay}>
-      <Card variant="elevated" className="hover-lift">
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className={cn('p-3 rounded-xl', factor.bg)}>
-              <factor.icon className={cn('w-6 h-6', factor.color)} />
-            </div>
-            <div>
-              <h3 className="font-semibold text-gray-900">{factor.label}</h3>
-              <p className="text-sm text-gray-500">{factor.desc}</p>
-            </div>
+    <Card variant="elevated" className="hover-lift" style={{ animationDelay: `${delay}ms` }}>
+      <CardHeader className="flex flex-row items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className={cn('p-3 rounded-xl', factor.bg)}>
+            <factor.icon className={cn('w-6 h-6', factor.color)} />
           </div>
-          <Badge variant={badgeVariant} className="animate-scale-in">
-            {score}/100
-          </Badge>
-        </CardHeader>
-        <CardContent className="animate-fade-in">
-          <div className="grid grid-cols-2 gap-4 mb-4">
-            <div>
-              <p className="text-sm text-gray-500">Percentile Régional</p>
-              <p className="text-2xl font-bold text-gray-900 animate-count-up">{percentile}th</p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-500">Contribution Confiance</p>
-              <p className="text-2xl font-bold text-gray-900 animate-count-up">{Math.round(score * confidence)}%</p>
-            </div>
+          <div>
+            <h3 className="font-semibold text-gray-900">{factor.label}</h3>
+            <p className="text-sm text-gray-500">{factor.desc}</p>
           </div>
-          <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-            <div
-              className="h-full rounded-full transition-all duration-1000 ease-out-cubic"
-              style={{ width: `${score}%`, background: 'linear-gradient(90deg, #ef4444, #f59e0b, #22c55e)' }}
-            />
+        </div>
+        <Badge variant={badgeVariant} className="animate-scale-in">
+          {score}/100
+        </Badge>
+      </CardHeader>
+      <CardContent className="animate-fade-in">
+        <div className="grid grid-cols-2 gap-4 mb-4">
+          <div>
+            <p className="text-sm text-gray-500">Percentile Régional</p>
+            <p className="text-2xl font-bold text-gray-900 animate-count-up">{percentile}th</p>
           </div>
-          <p className="text-xs text-gray-500 mt-2 text-center animate-fade-in" style={{ animationDelay: '200ms' }}>
-            {statusLabel}
-          </p>
-        </CardContent>
-      </Card>
-    </RevealOnScroll>
+          <div>
+            <p className="text-sm text-gray-500">Contribution Confiance</p>
+            <p className="text-2xl font-bold text-gray-900 animate-count-up">{Math.round(score * confidence)}%</p>
+          </div>
+        </div>
+        <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+          <div
+            className="h-full rounded-full transition-all duration-1000 ease-out-cubic"
+            style={{ width: `${score}%`, background: 'linear-gradient(90deg, #ef4444, #f59e0b, #22c55e)' }}
+          />
+        </div>
+        <p className="text-xs text-gray-500 mt-2 text-center animate-fade-in" style={{ animationDelay: '200ms' }}>
+          {statusLabel}
+        </p>
+      </CardContent>
+    </Card>
   )
 }
 
@@ -198,66 +188,68 @@ function DataSourceCard({ source, index, usedSources }: { source: any; index: nu
   const isUsed = usedSources.some(s => s.toLowerCase().includes(source.name.toLowerCase()))
 
   return (
-    <RevealOnScroll transition="slide-up" delay={index * 80}>
-      <Card
-        variant="elevated"
-        className={cn('hover-lift', isUsed && 'border-l-4 border-l-green-500')}
-        hover
-      >
-        <CardContent className="p-6 animate-fade-in">
-          <div className="flex items-start justify-between mb-3">
-            <div>
-              <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-                {source.name}
-                <Badge variant={isUsed ? 'success' : 'gray'} size="sm" className="animate-scale-in">
-                  {isUsed ? 'Utilisé' : 'Disponible'}
-                </Badge>
-              </h3>
-              <p className="text-sm text-gray-500">{source.full}</p>
-            </div>
-          </div>
-          <p className="text-xs text-gray-500 mb-3">{source.desc}</p>
-          <div className="flex flex-wrap gap-1">
-            {source.vars.map((v: string) => (
-              <Badge key={v} variant="gray" size="sm" className="animate-scale-in" style={{ animationDelay: `${Math.random() * 100}ms` }}>
-                {v}
+    <Card
+      variant="elevated"
+      className={cn('hover-lift', isUsed && 'border-l-4 border-l-green-500')}
+      hover
+      style={{ animationDelay: `${index * 80}ms` }}
+    >
+      <CardContent className="p-6 animate-fade-in">
+        <div className="flex items-start justify-between mb-3">
+          <div>
+            <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+              {source.name}
+              <Badge variant={isUsed ? 'success' : 'gray'} size="sm" className="animate-scale-in">
+                {isUsed ? 'Utilisé' : 'Disponible'}
               </Badge>
-            ))}
+            </h3>
+            <p className="text-sm text-gray-500">{source.full}</p>
           </div>
-        </CardContent>
-      </Card>
-    </RevealOnScroll>
+        </div>
+        <p className="text-xs text-gray-500 mb-3">{source.desc}</p>
+        <div className="flex flex-wrap gap-1">
+          {source.vars.map((v: string) => (
+            <Badge key={v} variant="gray" size="sm" className="animate-scale-in" style={{ animationDelay: `${Math.random() * 100}ms` }}>
+              {v}
+            </Badge>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
   )
 }
 
 function RecommendationCard({ rec, index }: { rec: string; index: number }) {
   return (
-    <RevealOnScroll transition="slide-up" delay={index * 80}>
-      <Card variant="outlined" className="border-l-4 border-l-primary-500 hover-lift">
-        <CardContent className="pt-6 pb-6 animate-fade-in">
-          <div className="flex items-start gap-3">
-            <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center animate-scale-in">
-              <CheckCircle className="w-5 h-5 text-primary-600" />
-            </div>
-            <p className="text-gray-700 mt-0.5">{rec}</p>
+    <Card variant="outlined" className="border-l-4 border-l-primary-500 hover-lift" style={{ animationDelay: `${index * 80}ms` }}>
+      <CardContent className="pt-6 pb-6 animate-fade-in">
+        <div className="flex items-start gap-3">
+          <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center animate-scale-in">
+            <CheckCircle className="w-5 h-5 text-primary-600" />
           </div>
-        </CardContent>
-      </Card>
-    </RevealOnScroll>
+          <p className="text-gray-700 mt-0.5">{rec}</p>
+        </div>
+      </CardContent>
+    </Card>
   )
 }
 
 export default function SoilHealth() {
   const { farms, selectedFarmId, selectFarm } = useFarmStore()
   const { addToast } = useUIStore()
-  const [formData, setFormData] = useState({
-    bbox: [-122.5, 37.5, -121.5, 38.5],
-    startDate: '2024-01-01',
-    endDate: '2024-12-31',
-    soilTexture: 'loam',
-    soilPh: 6.5,
-    organicMatter: '',
-    climateZone: 'temperate',
+  const [formData, setFormData] = useState(() => {
+    const end = new Date()
+    const start = new Date(end)
+    start.setFullYear(start.getFullYear() - 1)
+    return {
+      bbox: [-122.5, 37.5, -121.5, 38.5],
+      startDate: start.toISOString().slice(0, 10),
+      endDate: end.toISOString().slice(0, 10),
+      soilTexture: 'loam',
+      soilPh: 6.5,
+      organicMatter: '',
+      climateZone: 'temperate',
+    }
   })
   const [results, setResults] = useState<SoilHealthResult | null>(null)
   const [loading, setLoading] = useState(false)
@@ -266,31 +258,51 @@ export default function SoilHealth() {
   const [error, setError] = useState<string | null>(null)
   const [showResults, setShowResults] = useState(false)
 
-  // Set selected farm when farms change
+  // Load farm-specific settings and center analysis on its geometry.
   useEffect(() => {
-    if (farms.length > 0) {
-      const farm = farms.find(f => f.id === selectedFarmId) || farms[0]
-      setSelectedFarm(farm)
-      selectFarm(farm.id)
-      // Update form with farm location if available
-      if (farm.geometry && farm.geometry.type === 'Polygon' && farm.geometry.coordinates[0].length > 0) {
-        const coords = farm.geometry.coordinates[0]
-        const lons = coords.map(c => c[0])
-        const lats = coords.map(c => c[1])
-        const minLon = Math.min(...lons)
-        const maxLon = Math.max(...lons)
-        const minLat = Math.min(...lats)
-        const maxLat = Math.max(...lats)
-        setFormData(prev => ({
-          ...prev,
-          bbox: [minLon - 0.01, minLat - 0.01, maxLon + 0.01, maxLat + 0.01]
-        }))
-      }
-    } else {
+    if (farms.length === 0) {
       setSelectedFarm(null)
       selectFarm(null)
+      return
     }
+
+    const farm = farms.find((item) => item.id === selectedFarmId) || farms[0]
+    setSelectedFarm(farm)
+    selectFarm(farm.id)
+
+    const coords = farm.geometry?.type === 'Polygon' ? farm.geometry.coordinates[0] : []
+    const geometryBbox = coords.length > 0
+      ? [
+          Math.min(...coords.map((coord) => coord[0])) - 0.01,
+          Math.min(...coords.map((coord) => coord[1])) - 0.01,
+          Math.max(...coords.map((coord) => coord[0])) + 0.01,
+          Math.max(...coords.map((coord) => coord[1])) + 0.01,
+        ]
+      : undefined
+
+    let saved: Partial<typeof formData> = {}
+    try {
+      const raw = localStorage.getItem(`field-shift-soil-config:${farm.id}`)
+      if (raw) saved = JSON.parse(raw)
+    } catch {
+      // Ignore unavailable or invalid browser storage and continue with defaults.
+    }
+    setFormData((previous) => ({
+      ...previous,
+      ...saved,
+      bbox: saved.bbox || geometryBbox || previous.bbox,
+    }))
   }, [farms, selectedFarmId, selectFarm])
+
+  const handleSaveConfiguration = () => {
+    try {
+      const key = `field-shift-soil-config:${selectedFarm?.id || 'default'}`
+      localStorage.setItem(key, JSON.stringify(formData))
+      addToast({ type: 'success', title: 'Paramètres enregistrés', message: 'Configuration conservée dans ce navigateur.' })
+    } catch {
+      addToast({ type: 'error', title: 'Enregistrement impossible', message: 'Le stockage local du navigateur est indisponible.' })
+    }
+  }
 
   const handleAnalyze = async () => {
     if (!selectedFarm) {
@@ -331,322 +343,306 @@ export default function SoilHealth() {
   return (
     <AnimatedPage className="space-y-6">
       {/* Header */}
-      <RevealOnScroll transition="slide-up" delay={50}>
-        <PageHero
-          kicker="NASA Earth observations"
-          title="Santé du sol"
-          subtitle="Un score du sol à partir de l'humidité, de la végétation et du climat."
-          actions={
-            <Button
-              onClick={handleAnalyze}
-              loading={loading}
-              disabled={!selectedFarm || loading}
-              className="hover-lift"
-            >
-              <RefreshCw className="w-4 h-4 mr-2" />
-              Lancer l'analyse
-            </Button>
-          }
-        />
-      </RevealOnScroll>
+      <PageHero
+        kicker="NASA Earth observations"
+        title="Santé du sol"
+        subtitle="Un score du sol à partir de l'humidité, de la végétation et du climat."
+        actions={
+          <Button
+            onClick={handleAnalyze}
+            loading={loading}
+            disabled={!selectedFarm || loading}
+            className="hover-lift"
+          >
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Lancer l'analyse
+          </Button>
+        }
+      />
 
       {/* Configuration Form */}
-      <RevealOnScroll transition="slide-up" delay={100}>
-        <Card variant="elevated" className="border-l-4 border-l-primary-500 hover-lift">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <MapPin className="w-5 h-5 text-primary-600" />
-              Configuration de l'Analyse
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {selectedFarm && (
-              <div className="mb-4 p-3 rounded-lg bg-green-50 border border-green-200 animate-fade-in">
-                <p className="text-sm font-medium text-green-800">Analyse pour : {selectedFarm.name}</p>
-                <p className="text-xs text-green-700">La localisation sera auto-remplie depuis la géométrie de la ferme</p>
-              </div>
-            )}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <Input
-                label="Longitude Ouest"
-                type="number"
-                step="0.001"
-                value={formData.bbox[0]}
-                onChange={(e) => setFormData({...formData, bbox: [parseFloat(e.target.value), formData.bbox[1], formData.bbox[2], formData.bbox[3]]})}
-                placeholder="-122.5"
-              />
-              <Input
-                label="Latitude Sud"
-                type="number"
-                step="0.001"
-                value={formData.bbox[1]}
-                onChange={(e) => setFormData({...formData, bbox: [formData.bbox[0], parseFloat(e.target.value), formData.bbox[2], formData.bbox[3]]})}
-                placeholder="37.5"
-              />
-              <Input
-                label="Longitude Est"
-                type="number"
-                step="0.001"
-                value={formData.bbox[2]}
-                onChange={(e) => setFormData({...formData, bbox: [formData.bbox[0], formData.bbox[1], parseFloat(e.target.value), formData.bbox[3]]})}
-                placeholder="-121.5"
-              />
-              <Input
-                label="Latitude Nord"
-                type="number"
-                step="0.001"
-                value={formData.bbox[3]}
-                onChange={(e) => setFormData({...formData, bbox: [formData.bbox[0], formData.bbox[1], formData.bbox[2], parseFloat(e.target.value)]})}
-                placeholder="38.5"
-              />
+      <Card variant="elevated" className="border-l-4 border-l-primary-500 hover-lift animate-fade-in" style={{ animationDelay: '100ms' }}>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <MapPin className="w-5 h-5 text-primary-600" />
+            Configuration de l'Analyse
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {selectedFarm && (
+            <div className="mb-4 p-3 rounded-lg bg-green-50 border border-green-200 animate-fade-in">
+              <p className="text-sm font-medium text-green-800">Analyse pour : {selectedFarm.name}</p>
+              <p className="text-xs text-green-700">La localisation sera auto-remplie depuis la géométrie de la ferme</p>
             </div>
-            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <Input
-                label="Date de début"
-                type="date"
-                value={formData.startDate}
-                onChange={(e) => setFormData({...formData, startDate: e.target.value})}
-              />
-              <Input
-                label="Date de fin"
-                type="date"
-                value={formData.endDate}
-                onChange={(e) => setFormData({...formData, endDate: e.target.value})}
-              />
-              <Select
-                label="Texture du Sol"
-                value={formData.soilTexture}
-                onChange={(e) => setFormData({...formData, soilTexture: e.target.value})}
-                options={soilTextureOptions}
-              />
-              <Input
-                label="pH du Sol"
-                type="number"
-                step="0.1"
-                min="3"
-                max="9"
-                value={formData.soilPh}
-                onChange={(e) => setFormData({...formData, soilPh: parseFloat(e.target.value)})}
-                placeholder="6.5"
-              />
-            </div>
-            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Input
-                label="Matière Organique (%)"
-                type="number"
-                step="0.1"
-                value={formData.organicMatter}
-                onChange={(e) => setFormData({...formData, organicMatter: e.target.value})}
-                placeholder="Optionnel - laisser vide pour estimation"
-              />
-              <Select
-                label="Zone Climatique"
-                value={formData.climateZone}
-                onChange={(e) => setFormData({...formData, climateZone: e.target.value})}
-                options={climateZoneOptions}
-              />
-            </div>
-            <div className="mt-4 flex gap-2">
-              <Button onClick={handleAnalyze} loading={loading} className="flex-1 hover-lift" disabled={!selectedFarm || loading}>
-                <RefreshCw className="w-4 h-4 mr-2" />
-                Analyser la Santé du Sol
-              </Button>
-              <Button variant="secondary" onClick={() => {}} className="hover-lift">Sauvegarder la Configuration</Button>
-            </div>
-          </CardContent>
-        </Card>
-      </RevealOnScroll>
+          )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <Input
+              label="Longitude Ouest"
+              type="number"
+              step="0.001"
+              value={formData.bbox[0]}
+              onChange={(e) => setFormData({...formData, bbox: [parseFloat(e.target.value), formData.bbox[1], formData.bbox[2], formData.bbox[3]]})}
+              placeholder="-122.5"
+            />
+            <Input
+              label="Latitude Sud"
+              type="number"
+              step="0.001"
+              value={formData.bbox[1]}
+              onChange={(e) => setFormData({...formData, bbox: [formData.bbox[0], parseFloat(e.target.value), formData.bbox[2], formData.bbox[3]]})}
+              placeholder="37.5"
+            />
+            <Input
+              label="Longitude Est"
+              type="number"
+              step="0.001"
+              value={formData.bbox[2]}
+              onChange={(e) => setFormData({...formData, bbox: [formData.bbox[0], formData.bbox[1], parseFloat(e.target.value), formData.bbox[3]]})}
+              placeholder="-121.5"
+            />
+            <Input
+              label="Latitude Nord"
+              type="number"
+              step="0.001"
+              value={formData.bbox[3]}
+              onChange={(e) => setFormData({...formData, bbox: [formData.bbox[0], formData.bbox[1], formData.bbox[2], parseFloat(e.target.value)]})}
+              placeholder="38.5"
+            />
+          </div>
+          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <Input
+              label="Date de début"
+              type="date"
+              value={formData.startDate}
+              onChange={(e) => setFormData({...formData, startDate: e.target.value})}
+            />
+            <Input
+              label="Date de fin"
+              type="date"
+              value={formData.endDate}
+              onChange={(e) => setFormData({...formData, endDate: e.target.value})}
+            />
+            <Select
+              label="Texture du Sol"
+              value={formData.soilTexture}
+              onChange={(e) => setFormData({...formData, soilTexture: e.target.value})}
+              options={soilTextureOptions}
+            />
+            <Input
+              label="pH du Sol"
+              type="number"
+              step="0.1"
+              min="3"
+              max="9"
+              value={formData.soilPh}
+              onChange={(e) => setFormData({...formData, soilPh: parseFloat(e.target.value)})}
+              placeholder="6.5"
+            />
+          </div>
+          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Input
+              label="Matière Organique (%)"
+              type="number"
+              step="0.1"
+              value={formData.organicMatter}
+              onChange={(e) => setFormData({...formData, organicMatter: e.target.value})}
+              placeholder="Optionnel - laisser vide pour estimation"
+            />
+            <Select
+              label="Zone Climatique"
+              value={formData.climateZone}
+              onChange={(e) => setFormData({...formData, climateZone: e.target.value})}
+              options={climateZoneOptions}
+            />
+          </div>
+          <div className="mt-4 flex gap-2">
+            <Button onClick={handleAnalyze} loading={loading} className="flex-1 hover-lift" disabled={!selectedFarm || loading}>
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Analyser la Santé du Sol
+            </Button>
+            <Button variant="secondary" onClick={handleSaveConfiguration}>Sauvegarder la configuration</Button>
+          </div>
+        </CardContent>
+      </Card>
 
       {error && (
-        <RevealOnScroll transition="shake" delay={150}>
-          <Card variant="outlined" className="border-red-200 bg-red-50 animate-shake">
-            <CardContent className="p-4 flex items-center gap-3 text-red-700">
-              <AlertTriangle className="w-5 h-5" />
-              <span>{error}</span>
-              <Button variant="ghost" size="sm" onClick={handleAnalyze} className="ml-auto hover-lift">
-                <RefreshCw className="w-4 h-4 mr-1" />
-                Réessayer
-              </Button>
-            </CardContent>
-          </Card>
-        </RevealOnScroll>
+        <Card variant="outlined" className="border-red-200 bg-red-50 animate-shake animate-fade-in" style={{ animationDelay: '150ms' }}>
+          <CardContent className="p-4 flex items-center gap-3 text-red-700">
+            <AlertTriangle className="w-5 h-5" />
+            <span>{error}</span>
+            <Button variant="ghost" size="sm" onClick={handleAnalyze} className="ml-auto hover-lift">
+              <RefreshCw className="w-4 h-4 mr-1" />
+              Réessayer
+            </Button>
+          </CardContent>
+        </Card>
       )}
 
       {results && (
         <>
           {/* Results Tabs */}
-          <RevealOnScroll transition="slide-up" delay={showResults ? 200 : 1000}>
-            <Tabs defaultValue="overview" onChange={setActiveTab} className="w-full" animated transition="fade">
-              <TabsList className="grid w-full grid-cols-4">
-                <TabsTrigger value="overview" icon={<Gauge className="w-4 h-4" />}>Vue d'ensemble</TabsTrigger>
-                <TabsTrigger value="factors" icon={<BarChart3 className="w-4 h-4" />}>Détails Facteurs</TabsTrigger>
-                <TabsTrigger value="recommendations" icon={<Layers className="w-4 h-4" />}>Recommandations</TabsTrigger>
-                <TabsTrigger value="data" icon={<Database className="w-4 h-4" />}>Sources de Données</TabsTrigger>
-              </TabsList>
+          <Tabs defaultValue="overview" onChange={setActiveTab} className="w-full" animated transition="slide">
+            <TabsList className="grid w-full grid-cols-4">
+              <TabsTrigger value="overview" icon={<Gauge className="w-4 h-4" />}>Vue d'ensemble</TabsTrigger>
+              <TabsTrigger value="factors" icon={<BarChart3 className="w-4 h-4" />}>Détails Facteurs</TabsTrigger>
+              <TabsTrigger value="recommendations" icon={<Layers className="w-4 h-4" />}>Recommandations</TabsTrigger>
+              <TabsTrigger value="data" icon={<Database className="w-4 h-4" />}>Sources de Données</TabsTrigger>
+            </TabsList>
 
-              {/* Overview Tab */}
-              <TabsContent value="overview" transition="fade">
-                <StaggeredContainer staggerDelay={100} transition="stagger-slide-up" className="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
-                  {/* Score Card */}
-                  <ChartCard
-                    title="Score Global"
-                    icon={<Gauge className="w-5 h-5" />}
-                    delay={0}
-                  >
-                    <CardContent className="text-center py-8 animate-fade-in">
-                      <div className="relative inline-block mb-6">
-                        <svg className="w-40 h-40 transform -rotate-90">
-                          <circle
-                            cx="100"
-                            cy="100"
-                            r="90"
-                            fill="none"
-                            stroke="#e5e7eb"
-                            strokeWidth="12"
-                          />
-                          <circle
-                            cx="100"
-                            cy="100"
-                            r="90"
-                            fill="none"
-                            stroke="url(#gradient)"
-                            strokeWidth="12"
-                            strokeLinecap="round"
-                            strokeDasharray={`${results.overall_score / 100 * 565.48} 565.48`}
-                            style={{ strokeDashoffset: 0 }}
-                            className="animate-gauge-fill"
-                          />
-                          <defs>
-                            <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                              <stop offset="0%" stopColor="#ef4444" />
-                              <stop offset="30%" stopColor="#f59e0b" />
-                              <stop offset="60%" stopColor="#eab308" />
-                              <stop offset="100%" stopColor="#22c55e" />
-                            </linearGradient>
-                          </defs>
-                        </svg>
-                        <div className="absolute inset-0 flex flex-col items-center justify-center">
-                          <span className="text-5xl font-bold text-gray-900 animate-count-up">{results.overall_score}</span>
-                          <Badge className={cn('mt-2', getGradeColor(results.grade))}>
-                            Grade {results.grade}
-                          </Badge>
-                        </div>
+            {/* Overview Tab */}
+            <TabsContent value="overview" transition="slide">
+              <div className="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fade-in" style={{ animationDelay: '200ms' }}>
+                {/* Score Card */}
+                <ChartCard
+                  title="Score Global"
+                  icon={<Gauge className="w-5 h-5" />}
+                  delay={0}
+                >
+                  <CardContent className="text-center py-8 animate-fade-in">
+                    <div className="relative inline-block mb-6">
+                      <svg className="w-40 h-40 transform -rotate-90">
+                        <circle
+                          cx="100"
+                          cy="100"
+                          r="90"
+                          fill="none"
+                          stroke="#e5e7eb"
+                          strokeWidth="12"
+                        />
+                        <circle
+                          cx="100"
+                          cy="100"
+                          r="90"
+                          fill="none"
+                          stroke="url(#gradient)"
+                          strokeWidth="12"
+                          strokeLinecap="round"
+                          strokeDasharray={`${results.overall_score / 100 * 565.48} 565.48`}
+                          style={{ strokeDashoffset: 0 }}
+                          className="animate-gauge-fill"
+                        />
+                        <defs>
+                          <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                            <stop offset="0%" stopColor="#ef4444" />
+                            <stop offset="30%" stopColor="#f59e0b" />
+                            <stop offset="60%" stopColor="#eab308" />
+                            <stop offset="100%" stopColor="#22c55e" />
+                          </linearGradient>
+                        </defs>
+                      </svg>
+                      <div className="absolute inset-0 flex flex-col items-center justify-center">
+                        <span className="text-5xl font-bold text-gray-900 animate-count-up">{results.overall_score}</span>
+                        <Badge className={cn('mt-2', getGradeColor(results.grade))}>
+                          Grade {results.grade}
+                        </Badge>
                       </div>
-                      <div className="space-y-2 text-sm animate-slide-up">
-                        <p className="text-gray-500">Confiance: {Math.round(results.confidence * 100)}%</p>
-                        <p className="text-gray-500">Percentile: {results.percentiles.overall}th</p>
-                        <p className="text-gray-500">Évalué: {results.assessment_date}</p>
-                      </div>
-                    </CardContent>
-                    <CardFooter className="flex gap-2">
-                      <Button variant="secondary" size="sm" className="flex-1 hover-lift">
-                        <Download className="w-4 h-4 mr-2" />
-                        Exporter
-                      </Button>
-                      <Button variant="ghost" size="sm" className="flex-1 hover-lift" onClick={handleAnalyze}>
-                        <RefreshCw className="w-4 h-4 mr-2" />
-                        Relancer
-                      </Button>
-                    </CardFooter>
-                  </ChartCard>
-
-                  {/* Factor Scores */}
-                  <ChartCard
-                    title="Scores par Facteur"
-                    icon={<BarChart3 className="w-5 h-5" />}
-                    className="lg:col-span-2"
-                    delay={100}
-                  >
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      {factorDetails.map((factor, i) => {
-                        const score = results.factors[factor.key as keyof typeof results.factors]
-                        return (
-                          <RevealOnScroll key={factor.key} transition="scale-in" delay={i * 50}>
-                            <div className="p-4 rounded-xl bg-gray-50 animate-fade-in hover-lift">
-                              <div className="flex items-center gap-2 mb-2">
-                                <div className={cn('p-2 rounded-lg', factor.bg)}>
-                                  <factor.icon className={cn('w-5 h-5', factor.color)} />
-                                </div>
-                                <span className="font-medium text-gray-900 text-sm">{factor.label}</span>
-                              </div>
-                              <div className="flex items-end justify-between">
-                                <span className="text-3xl font-bold text-gray-900 animate-count-up">{score}</span>
-                                <Badge variant={score >= 80 ? 'success' : score >= 60 ? 'warning' : 'danger'} size="sm" className="animate-scale-in">
-                                  {score >= 80 ? 'Bon' : score >= 60 ? 'Moyen' : 'Faible'}
-                                </Badge>
-                              </div>
-                              <div className="mt-2 h-2 bg-gray-200 rounded-full overflow-hidden">
-                                <div
-                                  className="h-full rounded-full transition-all duration-1000 ease-out-cubic"
-                                  style={{ width: `${score}%`, background: 'linear-gradient(90deg, #ef4444, #f59e0b, #22c55e)' }}
-                                />
-                              </div>
-                              <p className="text-xs text-gray-500 mt-1">{factor.desc}</p>
-                            </div>
-                          </RevealOnScroll>
-                        )
-                      })}
                     </div>
-                  </ChartCard>
-                </StaggeredContainer>
-              </TabsContent>
+                    <div className="space-y-2 text-sm animate-slide-up">
+                      <p className="text-gray-500">Confiance: {Math.round(results.confidence * 100)}%</p>
+                      <p className="text-gray-500">Percentile: {results.percentiles.overall}th</p>
+                      <p className="text-gray-500">Évalué: {results.assessment_date}</p>
+                    </div>
+                  </CardContent>
+                  <CardFooter className="flex gap-2">
+                    <Button variant="secondary" size="sm" className="flex-1 hover-lift">
+                      <Download className="w-4 h-4 mr-2" />
+                      Exporter
+                    </Button>
+                    <Button variant="ghost" size="sm" className="flex-1 hover-lift" onClick={handleAnalyze}>
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                      Relancer
+                    </Button>
+                  </CardFooter>
+                </ChartCard>
 
-              {/* Factors Tab */}
-              <TabsContent value="factors" transition="fade">
-                <RevealOnScroll transition="slide-up" delay={100}>
-                  <StaggeredContainer staggerDelay={80} transition="stagger-slide-up" className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Factor Scores */}
+                <ChartCard
+                  title="Scores par Facteur"
+                  icon={<BarChart3 className="w-5 h-5" />}
+                  className="lg:col-span-2"
+                  delay={100}
+                >
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     {factorDetails.map((factor, i) => {
                       const score = results.factors[factor.key as keyof typeof results.factors]
-                      const percentile = results.percentiles[factor.key.replace('_score', '') as keyof typeof results.percentiles] || 50
                       return (
-                        <FactorCard
-                          key={factor.key}
-                          factor={factor}
-                          score={score}
-                          percentile={percentile}
-                          confidence={results.confidence}
-                          delay={i * 50}
-                        />
+                        <div key={factor.key} className="p-4 rounded-xl bg-gray-50 animate-fade-in hover-lift" style={{ animationDelay: `${i * 50}ms` }}>
+                          <div className="flex items-center gap-2 mb-2">
+                            <div className={cn('p-2 rounded-lg', factor.bg)}>
+                              <factor.icon className={cn('w-5 h-5', factor.color)} />
+                            </div>
+                            <span className="font-medium text-gray-900 text-sm">{factor.label}</span>
+                          </div>
+                          <div className="flex items-end justify-between">
+                            <span className="text-3xl font-bold text-gray-900 animate-count-up">{score}</span>
+                            <Badge variant={score >= 80 ? 'success' : score >= 60 ? 'warning' : 'danger'} size="sm" className="animate-scale-in">
+                              {score >= 80 ? 'Bon' : score >= 60 ? 'Moyen' : 'Faible'}
+                            </Badge>
+                          </div>
+                          <div className="mt-2 h-2 bg-gray-200 rounded-full overflow-hidden">
+                            <div
+                              className="h-full rounded-full transition-all duration-1000 ease-out-cubic"
+                              style={{ width: `${score}%`, background: 'linear-gradient(90deg, #ef4444, #f59e0b, #22c55e)' }}
+                            />
+                          </div>
+                          <p className="text-xs text-gray-500 mt-1">{factor.desc}</p>
+                        </div>
                       )
                     })}
-                  </StaggeredContainer>
-                </RevealOnScroll>
-              </TabsContent>
-
-              {/* Recommendations Tab */}
-              <TabsContent value="recommendations" transition="fade">
-                <RevealOnScroll transition="slide-up" delay={100}>
-                  <div className="mt-6 space-y-4 animate-fade-in">
-                    <h2 className="text-lg font-semibold text-gray-900">Recommandations Actionnables</h2>
-                    {results.recommendations.map((rec, i) => (
-                      <RecommendationCard key={i} rec={rec} index={i} />
-                    ))}
                   </div>
-                </RevealOnScroll>
-              </TabsContent>
+                </ChartCard>
+              </div>
+            </TabsContent>
 
-              {/* Data Sources Tab */}
-              <TabsContent value="data" transition="fade">
-                <RevealOnScroll transition="slide-up" delay={100}>
-                  <div className="mt-6 space-y-4 animate-fade-in">
-                    <h2 className="text-lg font-semibold text-gray-900">Sources de Données Utilisées</h2>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {[
-                        { name: 'SMAP', full: 'Soil Moisture Active Passive', vars: ['Surface Soil Moisture', 'Root Zone Soil Moisture'], desc: 'NASA JPL • 9km daily • Global' },
-                        { name: 'MODIS', full: 'Moderate Resolution Imaging Spectroradiometer', vars: ['NDVI', 'EVI', 'LST'], desc: 'NASA Terra/Aqua • 250m-1km • 16-day/8-day' },
-                        { name: 'Landsat 8/9', full: 'Landsat Collection 2 Level-2', vars: ['Surface Reflectance', 'NDVI', 'SAVI'], desc: 'USGS/NASA • 30m • 16-day' },
-                        { name: 'GPM/IMERG', full: 'Global Precipitation Measurement', vars: ['Precipitation Rate', 'Accumulation'], desc: 'NASA/JAXA • 0.1° • 30-min' },
-                        { name: 'ECOSTRESS', full: 'ECOsystem Spaceborne Thermal Radiometer', vars: ['ET', 'Water Stress Index', 'ESI'], desc: 'NASA JPL • 70m • ~4-day revisit' },
-                        { name: 'OpenET', full: 'Open Evapotranspiration', vars: ['Field-scale ET', 'ET Reference'], desc: 'NASA/USGS/DRI • 30m • Monthly' },
-                      ].map((source, i) => (
-                        <DataSourceCard key={i} source={source} index={i} usedSources={results.data_sources} />
-                      ))}
-                    </div>
-                  </div>
-                </RevealOnScroll>
-              </TabsContent>
-            </Tabs>
-          </RevealOnScroll>
+            {/* Factors Tab */}
+            <TabsContent value="factors" transition="slide">
+              <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6 animate-fade-in" style={{ animationDelay: '100ms' }}>
+                {factorDetails.map((factor, i) => {
+                  const score = results.factors[factor.key as keyof typeof results.factors]
+                  const percentile = results.percentiles[factor.key.replace('_score', '') as keyof typeof results.percentiles] || 50
+                  return (
+                    <FactorCard
+                      key={factor.key}
+                      factor={factor}
+                      score={score}
+                      percentile={percentile}
+                      confidence={results.confidence}
+                      delay={i * 50}
+                    />
+                  )
+                })}
+              </div>
+            </TabsContent>
+
+            {/* Recommendations Tab */}
+            <TabsContent value="recommendations" transition="slide">
+              <div className="mt-6 space-y-4 animate-fade-in" style={{ animationDelay: '100ms' }}>
+                <h2 className="text-lg font-semibold text-gray-900">Recommandations Actionnables</h2>
+                {results.recommendations.map((rec, i) => (
+                  <RecommendationCard key={i} rec={rec} index={i} />
+                ))}
+              </div>
+            </TabsContent>
+
+            {/* Data Sources Tab */}
+            <TabsContent value="data" transition="slide">
+              <div className="mt-6 space-y-4 animate-fade-in" style={{ animationDelay: '100ms' }}>
+                <h2 className="text-lg font-semibold text-gray-900">Sources de Données Utilisées</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {[
+                    { name: 'SMAP', full: 'Soil Moisture Active Passive', vars: ['Surface Soil Moisture', 'Root Zone Soil Moisture'], desc: 'NASA JPL • 9km daily • Global' },
+                    { name: 'MODIS', full: 'Moderate Resolution Imaging Spectroradiometer', vars: ['NDVI', 'EVI', 'LST'], desc: 'NASA Terra/Aqua • 250m-1km • 16-day/8-day' },
+                    { name: 'Landsat 8/9', full: 'Landsat Collection 2 Level-2', vars: ['Surface Reflectance', 'NDVI', 'SAVI'], desc: 'USGS/NASA • 30m • 16-day' },
+                    { name: 'GPM/IMERG', full: 'Global Precipitation Measurement', vars: ['Precipitation Rate', 'Accumulation'], desc: 'NASA/JAXA • 0.1° • 30-min' },
+                    { name: 'ECOSTRESS', full: 'ECOsystem Spaceborne Thermal Radiometer', vars: ['ET', 'Water Stress Index', 'ESI'], desc: 'NASA JPL • 70m • ~4-day revisit' },
+                    { name: 'OpenET', full: 'Open Evapotranspiration', vars: ['Field-scale ET', 'ET Reference'], desc: 'NASA/USGS/DRI • 30m • Monthly' },
+                  ].map((source, i) => (
+                    <DataSourceCard key={i} source={source} index={i} usedSources={results.data_sources} />
+                  ))}
+                </div>
+              </div>
+            </TabsContent>
+          </Tabs>
         </>
       )}
     </AnimatedPage>

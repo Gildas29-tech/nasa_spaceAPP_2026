@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { cn } from '../lib/utils'
 import {
   Leaf,
@@ -12,13 +12,11 @@ import {
   ArrowRight,
   CheckCircle,
   Clock,
-  TrendingUp as TrendingUpIcon,
   Cloud,
   Sun,
   Droplet,
   BarChart3,
   Plus,
-  Download,
   MapPin,
   RefreshCw,
   Loader2,
@@ -26,70 +24,62 @@ import {
 import { Card, CardHeader, CardTitle, CardContent, CardFooter, StatCard, MetricCard } from '../components/ui/Card'
 import { PageHero } from '../components/PageHero'
 import { Button } from '../components/ui/Button'
-import { Badge, StatusBadge } from '../components/ui/Badge'
+import { StatusBadge } from '../components/ui/Badge'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../components/ui/Tabs'
 import { useFarmStore } from '../stores/farmStore'
-import { useUIStore } from '../stores/uiStore'
 import { api } from '../lib/api'
 import { formatDate } from '../lib/utils'
 import { Skeleton, CardSkeleton, DashboardSkeleton, StatCardSkeleton } from '../components/ui/Skeleton'
-import { RevealOnScroll, StaggeredContainer } from '../components/PageTransition'
+import { AnimatedPage } from '../components/PageTransition'
 
 const quickActions = [
   {
     name: 'Santé du sol',
-    description: 'Humidité, matière organique et végétation à partir des données NASA',
+    description: 'Humidité, matière organique et végétation à partir des observations satellite.',
     icon: Leaf,
     href: '/soil-health',
-    color: 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400',
-    badge: 'Nouveau',
+    color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300',
   },
   {
-    name: 'Rotation',
-    description: 'Choisir une rotation selon l\'eau, le sol et le revenu',
+    name: 'Plan de rotation',
+    description: 'Comparer les successions culturales selon le sol, l’eau et le revenu.',
     icon: GitBranch,
     href: '/rotation-planner',
-    color: 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400',
-    badge: 'Utile',
+    color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
   },
   {
-    name: 'Rendement',
-    description: 'Estimer le rendement et sa fourchette',
+    name: 'Prévision de rendement',
+    description: 'Estimer une plage de rendement à partir du climat et du sol.',
     icon: TrendingUp,
     href: '/yield-predictor',
-    color: 'bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400',
-    badge: 'Beta',
+    color: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300',
   },
   {
     name: 'Stress hydrique',
-    description: 'Repérer la sécheresse et caler l\'irrigation',
+    description: 'Évaluer le risque de manque d’eau pour les cultures.',
     icon: AlertTriangle,
     href: '/water-stress',
-    color: 'bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400',
-    badge: 'Alerte',
+    color: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300',
   },
   {
-    name: 'Carte',
-    description: 'Voir les couches NASA sur le champ',
+    name: 'Carte des champs',
+    description: 'Localiser les parcelles et consulter les couches disponibles.',
     icon: Map,
     href: '/field-map',
-    color: 'bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400',
-    badge: 'Carte',
+    color: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300',
   },
   {
-    name: 'Réglages',
-    description: 'Sources, unités et préférences',
+    name: 'Paramètres',
+    description: 'Configurer les unités, les sources et les préférences.',
     icon: Settings,
     href: '/settings',
-    color: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400',
-    badge: null,
+    color: 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300',
   },
 ]
 
 export default function Dashboard() {
-  const [activeTab, setActiveTab] = useState('overview')
+  const navigate = useNavigate()
   const { farms, loading: farmsLoading, fetchFarms } = useFarmStore()
-  const { addToast } = useUIStore()
   const [weather, setWeather] = useState<{
     temperature?: string
     humidity?: string
@@ -104,41 +94,16 @@ export default function Dashboard() {
     status: string
     createdAt: string
   }>>([])
-  const [stats, setStats] = useState({
-    totalFarms: 0,
-    avgSoilHealth: 0,
-    activeAlerts: 0,
-    totalPredictions: 0,
-  })
 
   // Fetch farms on mount
   useEffect(() => {
     fetchFarms()
   }, [fetchFarms])
 
-  // Fetch weather data for first farm
-  useEffect(() => {
-    if (farms.length > 0) {
-      fetchWeatherForFarm(farms[0])
-    }
-  }, [farms])
-
   // Fetch recent collections
   useEffect(() => {
     fetchRecentCollections()
   }, [])
-
-  // Update stats when farms change
-  useEffect(() => {
-    setStats({
-      totalFarms: farms.length,
-      avgSoilHealth: farms.length > 0
-        ? Math.round(farms.reduce((sum, f) => sum + (f.dataStatus === 'completed' ? 85 : 50), 0) / farms.length)
-        : 0,
-      activeAlerts: 0,
-      totalPredictions: 0,
-    })
-  }, [farms])
 
   interface WeatherData {
     temperature?: number
@@ -169,13 +134,21 @@ export default function Dashboard() {
           soilMoisture: `${data.soilMoisture?.toFixed(3)} m³/m³`,
         })
       } else {
-        setWeather({ loading: false, error: 'No weather data available' })
+        setWeather({ loading: false, error: 'Aucune donnée météo disponible' })
       }
     } catch (error) {
       console.error('Failed to fetch weather:', error)
-      setWeather({ loading: false, error: 'Failed to fetch weather' })
+      setWeather({ loading: false, error: 'Échec du chargement météo' })
     }
   }, [])
+
+  useEffect(() => {
+    if (farms.length > 0) {
+      fetchWeatherForFarm(farms[0])
+    } else {
+      setWeather({ loading: false, error: 'Ajoutez une parcelle pour consulter les conditions météo.' })
+    }
+  }, [farms, fetchWeatherForFarm])
 
   const fetchRecentCollections = useCallback(async () => {
     try {
@@ -186,16 +159,15 @@ export default function Dashboard() {
     }
   }, [])
 
-  const handleAddField = () => {
-    window.location.href = '/field-map'
-  }
+  const handleAddField = () => navigate('/field-map')
 
   const getStatusConfig = (status: string) => {
     switch (status) {
-      case 'completed': return { variant: 'success' as const, icon: CheckCircle, pulse: false }
-      case 'partial_failure': return { variant: 'warning' as const, icon: AlertTriangle, pulse: false }
-      case 'collecting': return { variant: 'info' as const, icon: Loader2, pulse: true }
-      default: return { variant: 'info' as const, icon: BarChart3, pulse: false }
+      case 'completed': return { icon: CheckCircle, pulse: false, label: 'Terminée' }
+      case 'partial_failure': return { icon: AlertTriangle, pulse: false, label: 'Partielle' }
+      case 'collecting': return { icon: Loader2, pulse: true, label: 'En cours' }
+      case 'failed': return { icon: AlertCircle, pulse: false, label: 'Échec' }
+      default: return { icon: BarChart3, pulse: false, label: 'En attente' }
     }
   }
 
@@ -204,9 +176,9 @@ export default function Dashboard() {
     return (
       <div className="space-y-6 animate-fade-in">
         <PageHero
-          kicker="NASA Earth observation"
-          title="Vue d'ensemble"
-          subtitle="Lecture des champs, du climat et des cultures à partir des données NASA."
+          kicker="SYNTHÈSE AGRONOMIQUE"
+          title="Vue d’ensemble"
+          subtitle="État des parcelles, dernières observations et analyses disponibles."
         />
         <DashboardSkeleton />
       </div>
@@ -214,341 +186,295 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="space-y-6 animate-page-enter">
+    <AnimatedPage transition="rise" delay={50} className="space-y-6">
       {/* Header */}
       <PageHero
-        kicker="NASA Earth observation"
-        title="Vue d'ensemble"
-        subtitle="Lecture des champs, du climat et des cultures à partir des données NASA."
+        kicker="SYNTHÈSE AGRONOMIQUE"
+        title="Vue d’ensemble"
+        subtitle="État des parcelles, dernières observations et analyses disponibles."
         actions={
           <>
-            <Button variant="secondary" size="sm" onClick={() => addToast({ type: 'info', title: 'Export Report', message: 'Report generation coming soon' })}>
-              <Download className="w-4 h-4 mr-2" />
-              Exporter
-            </Button>
+            <Link to="/reports" className="inline-flex items-center rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+              Ouvrir les rapports
+            </Link>
             <Button size="sm" onClick={handleAddField}>
               <Plus className="w-4 h-4 mr-2" />
-              Ajouter un champ
+              Ajouter une parcelle
             </Button>
           </>
         }
       />
 
       {/* Stats Grid with animated cards */}
-      <RevealOnScroll transition="slide-up" delay={100}>
-        <StaggeredContainer staggerDelay={80} startDelay={100} transition="stagger-slide-up">
-          <StatCard
-            label="Champs suivis"
-            value={stats.totalFarms}
-            icon={<Map className="w-6 h-6" />}
-            trend={{ value: '+2 ce mois', positive: true }}
-            className="hover-lift"
-          />
-          <StatCard
-            label="Santé du sol"
-            value={`${stats.avgSoilHealth}/100`}
-            icon={<Leaf className="w-6 h-6" />}
-            trend={{ value: '+5 vs mois dernier', positive: true }}
-            className="hover-lift"
-          />
-          <StatCard
-            label="Alertes actives"
-            value={stats.activeAlerts}
-            icon={<AlertTriangle className="w-6 h-6" />}
-            trend={{ value: stats.activeAlerts === 0 ? 'Aucune' : 'En cours', positive: stats.activeAlerts === 0 }}
-            className="hover-lift"
-          />
-          <StatCard
-            label="Prévisions"
-            value={stats.totalPredictions}
-            icon={<TrendingUpIcon className="w-6 h-6" />}
-            trend={{ value: 'Nouveau', positive: true }}
-            className="hover-lift"
-          />
-        </StaggeredContainer>
-      </RevealOnScroll>
+      <div className="grid max-w-sm grid-cols-1 gap-4" style={{ animationDelay: '100ms' }}>
+        <StatCard
+          label="Parcelles enregistrées"
+          value={farms.length}
+          icon={<Map className="w-6 h-6" />}
+          className="hover-lift animate-fade-in"
+        />
+      </div>
 
       {/* Main Content Tabs */}
-      <Tabs defaultValue="overview" onChange={setActiveTab} className="w-full" animated transition="fade">
-        <TabsList className="grid w-full grid-cols-3">
+      <Tabs defaultValue="overview" className="w-full" variant="segments" animated transition="fade">
+        <TabsList className="grid w-full max-w-xl grid-cols-3">
           <TabsTrigger value="overview" icon={<BarChart3 className="w-4 h-4" />}>Vue d'ensemble</TabsTrigger>
           <TabsTrigger value="fields" icon={<Map className="w-4 h-4" />}>Champs</TabsTrigger>
           <TabsTrigger value="alerts" icon={<AlertTriangle className="w-4 h-4" />}>Alertes</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="overview" transition="fade">
-          <RevealOnScroll transition="slide-up" delay={100}>
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Quick Actions */}
-              <div className="lg:col-span-2 space-y-4">
-                <h2 className="text-lg font-semibold text-gray-900 animate-fade-in">Accès rapide</h2>
-                <StaggeredContainer staggerDelay={60} transition="stagger-slide-up">
-                  {quickActions.map((action, index) => (
-                    <Card
-                      key={action.name}
-                      variant="interactive"
-                      hover
-                      className="group overflow-hidden"
-                    >
-                      <CardContent className="p-6">
-                        <div className="flex items-start gap-4">
-                          <div className={cn('p-3 rounded-xl animate-scale-in', action.color)}>
-                            <action.icon className="w-6 h-6" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between">
-                              <h3 className="font-semibold text-gray-900">{action.name}</h3>
-                              {action.badge && (
-                                <Badge variant="soft" className="text-xs">{action.badge}</Badge>
-                              )}
-                            </div>
-                            <p className="text-sm text-gray-500 mt-1">{action.description}</p>
-                          </div>
+        <TabsContent value="overview" transition="slide">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Quick Actions */}
+            <div className="lg:col-span-2 space-y-4">
+              <h2 className="text-lg font-semibold text-gray-900">Analyses et outils</h2>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {quickActions.map((action, index) => (
+                  <Card
+                    key={action.name}
+                    variant="interactive"
+                    hover
+                    className="group overflow-hidden animate-fade-in"
+                    style={{ animationDelay: `${index * 80}ms` }}
+                  >
+                    <CardContent className="p-4">
+                      <div className="flex items-start gap-3">
+                        <div className={cn('rounded-lg p-2.5', action.color)}>
+                          <action.icon className="h-5 w-5" />
                         </div>
-                        <Link
-                          to={action.href}
-                          className="inline-flex items-center gap-1 text-sm font-medium text-primary-600 hover:text-primary-700 mt-4 group-hover:underline animate-slide-up"
+                        <div className="min-w-0 flex-1">
+                          <h3 className="font-semibold text-gray-900">{action.name}</h3>
+                          <p className="mt-1 text-sm leading-5 text-gray-500">{action.description}</p>
+                          <Link
+                            to={action.href}
+                            className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-primary-700 hover:text-primary-800"
+                          >
+                            Ouvrir l’outil
+                            <ArrowRight className="h-4 w-4" />
+                          </Link>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </div>
+
+            {/* Weather & Recent Activity */}
+            <div className="space-y-6">
+              <Card variant="elevated" className="hover-lift animate-fade-in" style={{ animationDelay: '100ms' }}>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Cloud className="w-5 h-5 text-blue-600" />
+                    Conditions actuelles
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {weather.loading ? (
+                    <div className="grid grid-cols-2 gap-4">
+                      {[1,2,3,4].map(i => (
+                        <div key={i} className="p-4 rounded-lg bg-gray-50 animate-pulse">
+                          <div className="h-4 bg-gray-200 rounded w-1/2 mb-2"></div>
+                          <div className="h-8 bg-gray-200 rounded"></div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : weather.error ? (
+                    <div className="p-4 text-center text-gray-500 animate-fade-in">
+                      <AlertCircle className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+                      <p>{weather.error}</p>
+                      {farms.length > 0 && (
+                        <Button variant="ghost" size="sm" className="mt-2" onClick={() => fetchWeatherForFarm(farms[0])}>
+                          <RefreshCw className="mr-1 h-4 w-4" />
+                          Réessayer
+                        </Button>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-4">
+                      {weather.temperature && (
+                        <MetricCard
+                          title="Température"
+                          value={weather.temperature.replace('°C', '')}
+                          unit="°C"
+                          icon={<Sun className="w-5 h-5" />}
+                          color="amber"
+                          className="animate-fade-in"
+                          style={{ animationDelay: '50ms' }}
+                        />
+                      )}
+                      {weather.humidity && (
+                        <MetricCard
+                          title="Humidité"
+                          value={weather.humidity.replace('%', '')}
+                          unit="%"
+                          icon={<Droplet className="w-5 h-5" />}
+                          color="sky"
+                          className="animate-fade-in"
+                          style={{ animationDelay: '100ms' }}
+                        />
+                      )}
+                      {weather.precipitation && (
+                        <MetricCard
+                          title="Pluie (7 j)"
+                          value={weather.precipitation.replace('mm', '')}
+                          unit="mm"
+                          icon={<Cloud className="w-5 h-5" />}
+                          color="earth"
+                          className="animate-fade-in"
+                          style={{ animationDelay: '150ms' }}
+                        />
+                      )}
+                      {weather.soilMoisture && (
+                        <MetricCard
+                          title="Humidité du sol"
+                          value={weather.soilMoisture.replace(' m³/m³', '')}
+                          unit="m³/m³"
+                          icon={<Droplet className="w-5 h-5" />}
+                          color="sky"
+                          className="animate-fade-in"
                           style={{ animationDelay: '200ms' }}
-                        >
-                          Ouvrir
-                          <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
-                        </Link>
-                      </CardContent>
-                      {/* Hover accent */}
-                      <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-primary-500 to-earth-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                    </Card>
-                  ))}
-                </StaggeredContainer>
-              </div>
-
-              {/* Weather & Recent Activity */}
-              <div className="space-y-6">
-                <RevealOnScroll transition="slide-up" delay={200}>
-                  <Card variant="elevated" className="hover-lift">
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2">
-                        <Cloud className="w-5 h-5 text-blue-600" />
-                        Conditions actuelles
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      {weather.loading ? (
-                        <div className="grid grid-cols-2 gap-4">
-                          {[1,2,3,4].map(i => (
-                            <div key={i} className="p-4 rounded-lg bg-gray-50 animate-pulse">
-                              <div className="h-4 bg-gray-200 rounded w-1/2 mb-2"></div>
-                              <div className="h-8 bg-gray-200 rounded"></div>
-                            </div>
-                          ))}
-                        </div>
-                      ) : weather.error ? (
-                        <div className="p-4 text-center text-gray-500 animate-fade-in">
-                          <AlertCircle className="w-8 h-8 mx-auto mb-2 text-gray-300" />
-                          <p>{weather.error}</p>
-                          <Button variant="ghost" size="sm" className="mt-2" onClick={() => farms.length > 0 && fetchWeatherForFarm(farms[0])}>
-                            <RefreshCw className="w-4 h-4 mr-1" />
-                            Réessayer
-                          </Button>
-                        </div>
-                      ) : (
-                        <StaggeredContainer staggerDelay={50} transition="stagger-scale">
-                          {weather.temperature && (
-                            <MetricCard
-                              title="Température"
-                              value={weather.temperature.replace('°C', '')}
-                              unit="°C"
-                              icon={<Sun className="w-5 h-5" />}
-                              color="amber"
-                            />
-                          )}
-                          {weather.humidity && (
-                            <MetricCard
-                              title="Humidité"
-                              value={weather.humidity.replace('%', '')}
-                              unit="%"
-                              icon={<Droplet className="w-5 h-5" />}
-                              color="sky"
-                            />
-                          )}
-                          {weather.precipitation && (
-                            <MetricCard
-                              title="Pluie (7 j)"
-                              value={weather.precipitation.replace('mm', '')}
-                              unit="mm"
-                              icon={<Cloud className="w-5 h-5" />}
-                              color="earth"
-                            />
-                          )}
-                          {weather.soilMoisture && (
-                            <MetricCard
-                              title="Humidité du sol"
-                              value={weather.soilMoisture.replace(' m³/m³', '')}
-                              unit="m³/m³"
-                              icon={<Droplet className="w-5 h-5" />}
-                              color="sky"
-                            />
-                          )}
-                        </StaggeredContainer>
+                        />
                       )}
-                    </CardContent>
-                  </Card>
-                </RevealOnScroll>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
 
-                <RevealOnScroll transition="slide-up" delay={300}>
-                  <Card variant="elevated" className="hover-lift">
-                    <CardHeader className="flex flex-row items-center justify-between">
-                      <CardTitle className="flex items-center gap-2">
-                        <Clock className="w-5 h-5 text-gray-600" />
-                        Collectes récentes
-                      </CardTitle>
-                      <Button variant="ghost" size="sm" onClick={fetchRecentCollections}>
-                        <RefreshCw className="w-4 h-4 mr-1" />
-                        Actualiser
-                      </Button>
-                    </CardHeader>
-                    <CardContent className="p-0">
-                      {recentCollections.length === 0 ? (
-                        <div className="p-6 text-center text-gray-500 animate-fade-in">
-                          <BarChart3 className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-                          <p>Aucune collecte récente</p>
-                          <p className="text-sm mt-1">Créez un champ, puis lancez une collecte.</p>
-                        </div>
-                      ) : (
-                        <div className="divide-y divide-gray-100">
-                          {recentCollections.map((collection, index) => {
-                            const statusConfig = getStatusConfig(collection.status)
-                            const Icon = statusConfig.icon
-                            return (
-                              <div
-                                key={collection.id}
-                                className="p-4 hover:bg-gray-50 flex items-center gap-4 animate-stagger-slide-up"
-                                style={{ animationDelay: `${index * 80}ms` }}
-                              >
-                                <div className={cn('p-2 rounded-full animate-scale-in',
-                                  collection.status === 'completed' ? 'bg-green-100 text-green-600' :
-                                  collection.status === 'partial_failure' ? 'bg-orange-100 text-orange-600' :
-                                  'bg-blue-100 text-blue-600'
-                                )}>
-                                  <Icon className={cn('w-5 h-5', statusConfig.pulse && 'animate-spin-fast')} />
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-sm font-medium text-gray-900">Data collection for {collection.farmName}</p>
-                                  <p className="text-xs text-gray-500">Status: {collection.status} • {formatDate(collection.createdAt)}</p>
-                                </div>
-                                <StatusBadge status={collection.status as any} />
-                              </div>
-                            )
-                          })}
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                </RevealOnScroll>
-              </div>
-            </div>
-          </RevealOnScroll>
-        </TabsContent>
-
-        <TabsContent value="fields" transition="fade">
-          <RevealOnScroll transition="slide-up" delay={100}>
-            <div className="space-y-4">
-              <div className="flex items-center justify-between animate-fade-in">
-                <h2 className="text-lg font-semibold text-gray-900">Your Fields</h2>
-                <Button size="sm" onClick={handleAddField}>
-                  <Plus className="w-4 h-4 mr-2" />
-                  Ajouter un champ
-                </Button>
-              </div>
-              {farms.length === 0 ? (
-                <Card variant="elevated" className="animate-fade-in">
-                  <CardContent className="p-12 text-center">
-                    <MapPin className="w-16 h-16 text-gray-300 mx-auto mb-4 animate-float" />
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">No fields yet</h3>
-                    <p className="text-gray-500 mb-4">Create your first field to start monitoring with NASA Earth observation data</p>
-                    <Button onClick={handleAddField} className="animate-slide-up">
-                      <Plus className="w-4 h-4 mr-2" />
-                      Create Field on Map
-                    </Button>
-                  </CardContent>
-                </Card>
-              ) : (
-                <StaggeredContainer staggerDelay={80} transition="stagger-slide-up" className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                  {farms.map((farm, index) => (
-                    <Card
-                      key={farm.id}
-                      variant="interactive"
-                      hover
-                      className="overflow-hidden"
-                    >
-                      <CardContent className="p-6">
-                        <div className="flex items-start justify-between mb-4">
-                          <div>
-                            <h3 className="font-semibold text-gray-900">{farm.name}</h3>
-                            <p className="text-sm text-gray-500">
-                              {farm.crop || 'No crop'} • {farm.area || 'Unknown area'}
-                            </p>
-                            <p className="text-xs text-gray-400 mt-1">
-                              <MapPin className="w-3 h-3 inline mr-1" />
-                              ({farm.centroid?.lat.toFixed(2)}, {farm.centroid?.lon.toFixed(2)})
-                            </p>
-                          </div>
-                          <StatusBadge status={farm.dataStatus as any} />
-                        </div>
-                        <div className="flex items-center justify-between animate-slide-up" style={{ animationDelay: '100ms' }}>
-                          <div className="flex items-center gap-2">
-                            <Leaf className="w-5 h-5 text-green-600" />
-                            <span className="text-sm text-gray-600">Soil Health</span>
-                          </div>
-                          <span className="text-xl font-bold text-gray-900 animate-count-up">
-                            {farm.dataStatus === 'completed' ? '85' : '—'}
-                          </span>
-                        </div>
-                        <div className="mt-3 h-2 bg-gray-100 rounded-full overflow-hidden animate-slide-up" style={{ animationDelay: '150ms' }}>
-                          <div
-                            className="h-full bg-green-500 rounded-full transition-all duration-1000 ease-out-cubic"
-                            style={{ width: farm.dataStatus === 'completed' ? '85%' : '0%' }}
-                          />
-                        </div>
-                        <div className="mt-4 pt-4 border-t border-gray-100 flex gap-2 animate-fade-in" style={{ animationDelay: '200ms' }}>
-                          <Link to={`/monitoring?farm=${farm.id}`} className="flex-1">
-                            <Button variant="ghost" size="sm" className="w-full">Monitor</Button>
-                          </Link>
-                          <Link to={`/crops?farm=${farm.id}`} className="flex-1">
-                            <Button variant="ghost" size="sm" className="w-full">Plan</Button>
-                          </Link>
-                          <Link to={`/reports?farm=${farm.id}`} className="flex-1">
-                            <Button variant="ghost" size="sm" className="w-full">Report</Button>
-                          </Link>
-                        </div>
-                      </CardContent>
-                      <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-primary-500 to-earth-500 opacity-0 hover:opacity-100 transition-opacity duration-300" />
-                    </Card>
-                  ))}
-                </StaggeredContainer>
-              )}
-            </div>
-          </RevealOnScroll>
-        </TabsContent>
-
-        <TabsContent value="alerts" transition="fade">
-          <RevealOnScroll transition="slide-up" delay={100}>
-            <div className="space-y-4">
-              <h2 className="text-lg font-semibold text-gray-900 animate-fade-in">Alertes actives</h2>
-              <Card variant="elevated" className="animate-fade-in">
-                <CardContent className="p-6 text-center text-gray-500">
-                  <AlertTriangle className="w-16 h-16 mx-auto mb-4 text-gray-300 animate-float" />
-                  <p className="font-medium text-gray-900 mb-1">No alerts at this time</p>
-                  <p className="text-sm">Create farms and run data collection to enable alert monitoring</p>
-                  <Button variant="secondary" className="mt-4 animate-slide-up" onClick={handleAddField}>
-                    <Plus className="w-4 h-4 mr-2" />
-                    Create First Field
+              <Card variant="elevated" className="hover-lift animate-fade-in" style={{ animationDelay: '200ms' }}>
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <CardTitle className="flex items-center gap-2">
+                    <Clock className="w-5 h-5 text-gray-600" />
+                    Collectes récentes
+                  </CardTitle>
+                  <Button variant="ghost" size="sm" onClick={fetchRecentCollections}>
+                    <RefreshCw className="w-4 h-4 mr-1" />
+                    Actualiser
                   </Button>
+                </CardHeader>
+                <CardContent className="p-0">
+                  {recentCollections.length === 0 ? (
+                    <div className="p-6 text-center text-gray-500 animate-fade-in">
+                      <BarChart3 className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                      <p>Aucune collecte récente</p>
+                      <p className="text-sm mt-1">Créez un champ, puis lancez une collecte.</p>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-gray-100">
+                      {recentCollections.map((collection, index) => {
+                        const statusConfig = getStatusConfig(collection.status)
+                        const Icon = statusConfig.icon
+                        return (
+                          <div
+                            key={collection.id}
+                            className="p-4 hover:bg-gray-50 flex items-center gap-4 animate-fade-in"
+                            style={{ animationDelay: `${index * 80}ms` }}
+                          >
+                            <div className={cn('p-2 rounded-full animate-scale-in',
+                              collection.status === 'completed' ? 'bg-green-100 text-green-600' :
+                              collection.status === 'partial_failure' ? 'bg-orange-100 text-orange-600' :
+                              'bg-blue-100 text-blue-600'
+                            )}>
+                              <Icon className={cn('w-5 h-5', statusConfig.pulse && 'animate-spin-fast')} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-gray-900">Collecte de données — {collection.farmName}</p>
+                              <p className="text-xs text-gray-500">État : {statusConfig.label} • {formatDate(collection.createdAt)}</p>
+                            </div>
+                            <StatusBadge status={collection.status as any} />
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </div>
-          </RevealOnScroll>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="fields" transition="slide">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between animate-fade-in">
+              <h2 className="text-lg font-semibold text-gray-900">Parcelles suivies</h2>
+              <Button size="sm" onClick={handleAddField}>
+                <Plus className="w-4 h-4 mr-2" />
+                Ajouter une parcelle
+              </Button>
+            </div>
+            {farms.length === 0 ? (
+              <Card variant="elevated" className="animate-fade-in">
+                <CardContent className="p-12 text-center">
+                  <MapPin className="w-16 h-16 text-gray-300 mx-auto mb-4 animate-float" />
+                  <h3 className="mb-2 text-lg font-medium text-gray-900">Aucune parcelle enregistrée</h3>
+                  <p className="mb-4 text-gray-500">Ajoutez une parcelle pour consulter ses observations et analyses.</p>
+                  <Button onClick={handleAddField}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Ajouter une parcelle sur la carte
+                  </Button>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {farms.map((farm, index) => (
+                  <Card
+                    key={farm.id}
+                    variant="interactive"
+                    hover
+                    className="overflow-hidden animate-fade-in"
+                    style={{ animationDelay: `${index * 80}ms` }}
+                  >
+                    <CardContent className="p-6">
+                      <div className="flex items-start justify-between mb-4">
+                        <div>
+                          <h3 className="font-semibold text-gray-900">{farm.name}</h3>
+                          <p className="text-sm text-gray-500">
+                            {farm.crop || 'Culture non précisée'}{farm.area ? ` · ${farm.area}` : ''}
+                          </p>
+                          <p className="text-xs text-gray-400 mt-1">
+                            <MapPin className="w-3 h-3 inline mr-1" />
+                            ({farm.centroid?.lat.toFixed(2)}, {farm.centroid?.lon.toFixed(2)})
+                          </p>
+                        </div>
+                        <StatusBadge status={farm.dataStatus as any} />
+                      </div>
+                      <div className="mt-4 pt-4 border-t border-gray-100 flex gap-2 animate-fade-in" style={{ animationDelay: '200ms' }}>
+                        <Link to={`/monitoring?farm=${farm.id}`} className="flex-1">
+                          <Button variant="ghost" size="sm" className="w-full">Suivi</Button>
+                        </Link>
+                        <Link to={`/crops?farm=${farm.id}`} className="flex-1">
+                          <Button variant="ghost" size="sm" className="w-full">Rotation</Button>
+                        </Link>
+                        <Link to={`/reports?farm=${farm.id}`} className="flex-1">
+                          <Button variant="ghost" size="sm" className="w-full">Rapport</Button>
+                        </Link>
+                      </div>
+                    </CardContent>
+                    <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-primary-500 to-earth-500 opacity-0 hover:opacity-100 transition-opacity duration-300" />
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
+        </TabsContent>
+
+        <TabsContent value="alerts" transition="slide">
+          <div className="space-y-4">
+            <h2 className="text-lg font-semibold text-gray-900">Alertes</h2>
+            <Card variant="elevated" className="animate-fade-in">
+              <CardContent className="p-6 text-center text-gray-500">
+                <AlertTriangle className="w-16 h-16 mx-auto mb-4 text-gray-300 animate-float" />
+                <p className="mb-1 font-medium text-gray-900">Aucune alerte calculée</p>
+                <p className="text-sm">Les alertes sont disponibles après la collecte des données d’une parcelle.</p>
+                <Button variant="secondary" className="mt-4" onClick={handleAddField}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Ajouter une parcelle
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
       </Tabs>
-    </div>
+    </AnimatedPage>
   )
 }

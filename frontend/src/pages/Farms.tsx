@@ -42,13 +42,13 @@ import { Input, Textarea } from '../components/ui/Input'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../components/ui/Tabs'
 import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '../components/ui/Dialog'
 import { useFarmDataCollection, useCollectionPolling, useDataSourceAvailability, type Farm, type DataCollectionRequest } from '../hooks/useDataCollection'
-import { formatDate } from '../lib/utils'
+import { downloadCsv, formatDate } from '../lib/utils'
 import { useFarmStore } from '../stores/farmStore'
 import { useUIStore } from '../stores/uiStore'
 import { useCreateFarmWithStore, useDeleteFarmWithStore } from '../hooks/useDataCollection'
 import maplibregl from 'maplibre-gl'
 import { Skeleton, CardSkeleton, StatCardSkeleton } from '../components/ui/Skeleton'
-import { RevealOnScroll, StaggeredContainer, AnimatedPage } from '../components/PageTransition'
+import { AnimatedPage, StaggeredContainer } from '../components/PageTransition'
 
 const getDataSourceStatusBadge = (status: string) => {
   switch (status) {
@@ -315,7 +315,7 @@ function CollectDataDialog({ open, onOpenChange, farm, onCollectionStarted }: Co
       <DialogTrigger>
         <DialogContent className="sm:max-w-[600px] animate-modal-enter">
           <DialogHeader>
-            <DialogTitle>Collect Data for {farm.name}</DialogTitle>
+            <DialogTitle>Collecter les données for {farm.name}</DialogTitle>
             <DialogDescription>Trigger NASA data collection for this farm</DialogDescription>
             <DialogClose onClick={() => onOpenChange(false)} />
           </DialogHeader>
@@ -540,9 +540,8 @@ function CollectionStatusDialog({ open, onOpenChange, collectionId }: Collection
 }
 
 export default function Farms() {
-  const [activeTab, setActiveTab] = useState('list')
   const [searchQuery, setSearchQuery] = useState('')
-  const [countryFilter, setCountryFilter] = useState('all')
+  const [cropFilter, setCropFilter] = useState('all')
   const [showMap, setShowMap] = useState(false)
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [collectDialogOpen, setCollectDialogOpen] = useState(false)
@@ -550,21 +549,20 @@ export default function Farms() {
   const [selectedFarm, setSelectedFarm] = useState<Farm | null>(null)
   const [activeCollectionId, setActiveCollectionId] = useState<string | null>(null)
 
-  const { farms, loading: farmsLoading, error: farmsError, fetchFarms, deleteFarm: deleteFarmStore } = useFarmStore()
+  const { farms, loading: farmsLoading, error: farmsError, fetchFarms } = useFarmStore()
   const { addToast } = useUIStore()
-  const createFarmWithStore = useCreateFarmWithStore()
   const deleteFarmWithStore = useDeleteFarmWithStore()
 
   React.useEffect(() => { fetchFarms() }, [fetchFarms])
 
   const handleDeleteFarm = async (farmId: string) => {
-    if (!confirm('Are you sure you want to delete this farm? This action cannot be undone.')) return
+    if (!confirm(`Supprimer la parcelle « ${farms.find((farm) => farm.id === farmId)?.name || ''} » ? Cette action est irréversible.`)) return
     try {
       await deleteFarmWithStore.mutateAsync(farmId)
-      addToast({ type: 'success', title: 'Farm deleted' })
+      addToast({ type: 'success', title: 'Parcelle supprimée' })
     } catch (error) {
-      console.error('Failed to delete farm:', error)
-      addToast({ type: 'error', title: 'Failed to delete farm', message: 'Please try again' })
+      console.error('Échec de la suppression de la parcelle :', error)
+      addToast({ type: 'error', title: 'Suppression impossible', message: 'Réessayez dans quelques instants.' })
     }
   }
 
@@ -573,28 +571,45 @@ export default function Farms() {
     setStatusDialogOpen(true)
   }
 
-  const countries = farms ? [...new Set(farms.flatMap(f => f.crops_of_interest || []).filter(Boolean))] : []
+  const crops = farms ? [...new Set(farms.flatMap((farm) => farm.crops_of_interest || []).filter(Boolean))] : []
 
-  const filteredFarms = farms?.filter(f => {
-    if (searchQuery && !f.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
-        !f.crops_of_interest?.some(c => c.toLowerCase().includes(searchQuery.toLowerCase()))) return false
-    if (countryFilter !== 'all' && f.crops_of_interest?.[0] !== countryFilter) return false
-    return true
+  const filteredFarms = farms?.filter((farm) => {
+    const query = searchQuery.trim().toLocaleLowerCase('fr')
+    const matchesQuery = !query || farm.name.toLocaleLowerCase('fr').includes(query) ||
+      farm.crops_of_interest?.some((crop) => crop.toLocaleLowerCase('fr').includes(query))
+    const matchesCrop = cropFilter === 'all' || farm.crops_of_interest?.includes(cropFilter)
+    return Boolean(matchesQuery && matchesCrop)
   }) || []
 
+  const exportFilteredFarms = () => {
+    downloadCsv(
+      'parcelles.csv',
+      ['Nom', 'Cultures déclarées', 'Description', 'Latitude', 'Longitude', 'Créée le', 'Mise à jour'],
+      filteredFarms.map((farm) => [
+        farm.name,
+        farm.crops_of_interest?.join(', ') || '',
+        farm.description || '',
+        farm.centroid?.lat ?? '',
+        farm.centroid?.lon ?? '',
+        farm.createdAt ? formatDate(farm.createdAt) : '',
+        farm.updatedAt ? formatDate(farm.updatedAt) : '',
+      ]),
+    )
+  }
+
   const stats = [
-    { label: 'Exploitations', value: farms?.length || 0, icon: MapIcon, color: 'text-blue-600', bgColor: 'bg-blue-100' },
-    { label: 'Types de cultures', value: countries.length, icon: Leaf, color: 'text-green-600', bgColor: 'bg-green-100' },
-    { label: 'Cultures', value: farms?.reduce((sum, f) => sum + (f.crops_of_interest?.length || 0), 0), icon: GitBranch, color: 'text-orange-600', bgColor: 'bg-orange-100' },
-    { label: 'Collectes en cours', value: 0, icon: RefreshCw, color: 'text-purple-600', bgColor: 'bg-purple-100' },
+    { label: 'Parcelles', value: farms?.length || 0, icon: MapIcon, color: 'text-blue-600', bgColor: 'bg-blue-100' },
+    { label: 'Cultures représentées', value: crops.length, icon: Leaf, color: 'text-green-600', bgColor: 'bg-green-100' },
+    { label: 'Cultures déclarées', value: farms?.reduce((sum, farm) => sum + (farm.crops_of_interest?.length || 0), 0), icon: GitBranch, color: 'text-orange-600', bgColor: 'bg-orange-100' },
+    { label: 'Parcelles avec culture', value: farms?.filter((farm) => (farm.crops_of_interest?.length || 0) > 0).length || 0, icon: CheckCircle, color: 'text-cyan-600', bgColor: 'bg-cyan-100' },
   ]
 
   // Loading skeleton
   if (farmsLoading || (farms === undefined)) {
     return (
       <AnimatedPage>
-        <PageHero kicker="AgriTwin" title="Mes exploitations" subtitle="Les champs, leurs cultures et l'état de chaque collecte." />
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 animate-fade-in">
+        <PageHero kicker="GESTION DES PARCELLES" title="Mes exploitations" subtitle="Parcelles enregistrées, cultures déclarées et état des collectes de données." />
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
           {stats.map((stat, i) => (
             <StatCardSkeleton key={stat.label} className="animate-stagger-slide-up stagger-1" style={{ animationDelay: `${i * 100}ms` }} />
           ))}
@@ -608,18 +623,18 @@ export default function Farms() {
     <AnimatedPage className="space-y-6">
       {/* Header */}
       <PageHero
-        kicker="AgriTwin"
+        kicker="GESTION DES PARCELLES"
         title="Mes exploitations"
-        subtitle="Les champs, leurs cultures et l'état de chaque collecte."
+        subtitle="Parcelles enregistrées, cultures déclarées et état des collectes de données."
         actions={
           <>
-            <Button variant="secondary" size="sm" onClick={() => {}}>
-              <Download className="w-4 h-4 mr-2" />
-              Exporter
+            <Button variant="secondary" size="sm" onClick={exportFilteredFarms} disabled={filteredFarms.length === 0}>
+              <Download className="mr-2 h-4 w-4" />
+              Exporter la liste
             </Button>
             <Button variant="secondary" size="sm" onClick={() => setShowMap(!showMap)}>
               <MapIcon className="w-4 h-4 mr-2" />
-              {showMap ? 'Liste' : 'Carte'}
+              {showMap ? 'Masquer la carte' : 'Afficher la carte'}
             </Button>
             <CreateFarmDialog
               open={createDialogOpen}
@@ -628,183 +643,183 @@ export default function Farms() {
             />
             <Button size="sm" onClick={() => setCreateDialogOpen(true)}>
               <Plus className="w-4 h-4 mr-2" />
-              Nouveau champ
+              Nouvelle parcelle
             </Button>
           </>
         }
       />
 
       {/* Stats with animated cards */}
-      <RevealOnScroll transition="slide-up" delay={100}>
-        <StaggeredContainer staggerDelay={80} startDelay={100} transition="stagger-slide-up">
-          {stats.map((stat) => (
-            <StatCard
-              key={stat.label}
-              label={stat.label}
-              value={stat.value}
-              icon={<stat.icon className="w-6 h-6" />}
-              className="hover-lift"
-            />
-          ))}
-        </StaggeredContainer>
-      </RevealOnScroll>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4" style={{ animationDelay: '100ms' }}>
+        {stats.map((stat, i) => (
+          <StatCard
+            key={stat.label}
+            label={stat.label}
+            value={stat.value}
+            icon={<stat.icon className="w-6 h-6" />}
+            className="hover-lift animate-fade-in"
+            style={{ animationDelay: `${i * 80}ms` }}
+          />
+        ))}
+      </div>
 
       {/* Error display */}
       {farmsError && (
-        <RevealOnScroll transition="slide-up" delay={200}>
-          <Card variant="outlined" className="border-red-200 bg-red-50 animate-shake">
-            <CardContent className="p-4 flex items-center gap-3 text-red-700">
-              <AlertCircle className="w-5 h-5" />
-              <span>Impossible de charger les exploitations : {farmsError}</span>
-              <Button variant="ghost" size="sm" onClick={() => fetchFarms()} className="ml-auto">
-                <RefreshCw className="w-4 h-4 mr-1" />
-                Réessayer
-              </Button>
-            </CardContent>
-          </Card>
-        </RevealOnScroll>
+        <Card variant="outlined" className="border-red-200 bg-red-50 animate-shake animate-fade-in">
+          <CardContent className="p-4 flex items-center gap-3 text-red-700">
+            <AlertCircle className="w-5 h-5" />
+            <span>Impossible de charger les exploitations : {farmsError}</span>
+            <Button variant="ghost" size="sm" onClick={() => fetchFarms()} className="ml-auto">
+              <RefreshCw className="w-4 h-4 mr-1" />
+              Réessayer
+            </Button>
+          </CardContent>
+        </Card>
       )}
 
       {/* Map View */}
       {showMap && (
-        <RevealOnScroll transition="slide-up" delay={200}>
-          <Card variant="elevated" className="mb-6 overflow-hidden hover-lift">
-            <CardHeader>
-              <CardTitle className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <MapIcon className="w-5 h-5 text-blue-600" />
-                  Farm Map View
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-gray-500">{filteredFarms.length} farms</span>
-                </div>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-0 animate-fade-in">
-              <FarmMapView farms={filteredFarms} onFarmClick={setSelectedFarm} />
-            </CardContent>
-          </Card>
-        </RevealOnScroll>
+        <Card variant="elevated" className="mb-6 overflow-hidden hover-lift animate-fade-in" style={{ animationDelay: '200ms' }}>
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <MapIcon className="w-5 h-5 text-blue-600" />
+                Carte des parcelles
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-500">{filteredFarms.length} parcelle{filteredFarms.length > 1 ? 's' : ''}</span>
+              </div>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0 animate-fade-in">
+            <FarmMapView farms={filteredFarms} />
+          </CardContent>
+        </Card>
       )}
 
       {/* Filters */}
-      <RevealOnScroll transition="slide-up" delay={200}>
-        <Card variant="elevated" className="hover-lift">
-          <CardContent className="p-4">
-            <div className="flex flex-col sm:flex-row gap-4">
-              <div className="flex-1 sm:w-80 relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <Input placeholder="Nom ou culture..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-10" />
-              </div>
-              <div className="flex-1 sm:w-48">
-                <Select label="Culture" value={countryFilter} onChange={(e) => setCountryFilter(e.target.value)}
-                  options={[{ value: 'all', label: 'Toutes' }, ...countries.map(c => ({ value: c, label: c }))]} />
-              </div>
+      <Card variant="elevated" className="hover-lift animate-fade-in" style={{ animationDelay: '200ms' }}>
+        <CardContent className="p-4">
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="flex-1 sm:w-80 relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <Input placeholder="Rechercher une parcelle ou une culture" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-10" />
             </div>
-          </CardContent>
-        </Card>
-      </RevealOnScroll>
+            <div className="flex-1 sm:w-48">
+              <Select label="Filtrer par culture" value={cropFilter} onChange={(e) => setCropFilter(e.target.value)}
+                options={[{ value: 'all', label: 'Toutes les cultures' }, ...crops.map((crop) => ({ value: crop, label: crop }))]} />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Farms List */}
-      <Tabs defaultValue={activeTab} onChange={setActiveTab} className="w-full" animated transition="fade">
-        <TabsList className="grid w-full grid-cols-2">
+      <Tabs defaultValue="list" className="w-full" variant="segments" animated transition="fade">
+        <TabsList className="grid w-full max-w-lg grid-cols-2">
           <TabsTrigger value="list" icon={<MapPinLucide className="w-4 h-4" />}>Liste ({filteredFarms.length})</TabsTrigger>
           <TabsTrigger value="details" icon={<FileText className="w-4 h-4" />}>Détails</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="list" transition="fade">
-          <RevealOnScroll transition="slide-up" delay={100}>
-            <StaggeredContainer staggerDelay={60} transition="stagger-slide-up" className="space-y-3 mt-6">
-              {filteredFarms.length === 0 ? (
-                <Card variant="elevated" className="animate-fade-in">
-                  <CardContent className="p-12 text-center">
-                    <MapPin className="w-12 h-12 text-gray-300 mx-auto mb-4 animate-float" />
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">Aucune exploitation</h3>
-                    <p className="text-gray-500 mb-4">Élargissez la recherche, ou créez un champ.</p>
-                    <Button onClick={() => setCreateDialogOpen(true)} className="animate-slide-up">
-                      <Plus className="w-4 h-4 mr-2" />
-                      Créer un champ
+        <TabsContent value="list" transition="slide">
+          <div className="space-y-3 mt-6">
+            {filteredFarms.length === 0 ? (
+              <Card variant="elevated" className="animate-fade-in">
+                <CardContent className="p-12 text-center">
+                  <MapPin className="w-12 h-12 text-gray-300 mx-auto mb-4 animate-float" />
+                  <h3 className="mb-2 text-lg font-medium text-gray-900">
+                    {farms.length === 0 ? 'Aucune parcelle enregistrée' : 'Aucun résultat'}
+                  </h3>
+                  <p className="mb-4 text-gray-500">
+                    {farms.length === 0 ? 'Ajoutez une parcelle pour commencer le suivi.' : 'Modifiez votre recherche ou effacez les filtres.'}
+                  </p>
+                  {farms.length === 0 ? (
+                    <Button onClick={() => setCreateDialogOpen(true)}>
+                      <Plus className="mr-2 h-4 w-4" />
+                      Nouvelle parcelle
                     </Button>
-                  </CardContent>
-                </Card>
-              ) : (
-                filteredFarms.map((farm, index) => (
-                  <Card
-                    key={farm.id}
-                    variant="interactive"
-                    hover
-                    className="overflow-hidden"
-                  >
-                    <CardContent className="p-4">
-                      <div className="flex flex-col lg:flex-row lg:items-center gap-4">
-                        <div className="flex items-center gap-4 min-w-[280px] flex-1">
-                          <div className="p-3 rounded-xl bg-green-100 dark:bg-green-900/30 animate-scale-in">
-                            <Leaf className="w-6 h-6 text-green-600 dark:text-green-400" />
-                          </div>
-                          <div>
-                            <h3 className="font-semibold text-gray-900">{farm.name}</h3>
-                            <p className="text-sm text-gray-500">{farm.crops_of_interest?.[0] || 'Culture non précisée'}</p>
-                            <p className="text-xs text-gray-400 mt-1">
-                              <MapPin className="w-3 h-3 inline mr-1" />
-                              ({farm.centroid?.lat.toFixed(2)}, {farm.centroid?.lon.toFixed(2)})
-                            </p>
-                          </div>
+                  ) : (
+                    <Button variant="secondary" onClick={() => { setSearchQuery(''); setCropFilter('all') }}>
+                      Effacer les filtres
+                    </Button>
+                  )}
+                </CardContent>
+              </Card>
+            ) : (
+              filteredFarms.map((farm, index) => (
+                <Card
+                  key={farm.id}
+                  variant="interactive"
+                  hover
+                  className="overflow-hidden animate-fade-in"
+                  style={{ animationDelay: `${index * 60}ms` }}
+                >
+                  <CardContent className="p-4">
+                    <div className="flex flex-col lg:flex-row lg:items-center gap-4">
+                      <div className="flex items-center gap-4 min-w-[280px] flex-1">
+                        <div className="p-3 rounded-xl bg-green-100 dark:bg-green-900/30 animate-scale-in">
+                          <Leaf className="w-6 h-6 text-green-600 dark:text-green-400" />
                         </div>
-                        <div className="flex items-center gap-4 text-sm text-gray-600 min-w-[200px] hidden lg:flex">
-                          <div className="flex items-center gap-1"><Calendar className="w-4 h-4" /><span>Créé : {farm.createdAt ? formatDate(farm.createdAt) : 'Unknown'}</span></div>
-                          <div className="flex items-center gap-1"><Clock className="w-4 h-4" /><span>Mis à jour : {farm.updatedAt ? formatDate(farm.updatedAt) : 'Unknown'}</span></div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Link to={`/monitoring?farm=${farm.id}`}><Button variant="ghost" size="sm"><Eye className="w-4 h-4 mr-1" />Surveillance</Button></Link>
-                          <Link to={`/crops?farm=${farm.id}`}><Button variant="ghost" size="sm"><GitBranch className="w-4 h-4 mr-1" />Rotation</Button></Link>
-                          <Link to={`/reports?farm=${farm.id}`}><Button variant="ghost" size="sm"><FileText className="w-4 h-4 mr-1" />Rapport</Button></Link>
-                          <CollectDataDialog open={collectDialogOpen && selectedFarm?.id === farm.id} onOpenChange={setCollectDialogOpen} farm={farm} onCollectionStarted={handleCollectionStarted} />
-                          <Button variant="ghost" size="sm" onClick={() => { setSelectedFarm(farm); setCollectDialogOpen(true); }}><RefreshCw className="w-4 h-4 mr-1" />Collect Data</Button>
-                          <Button variant="ghost" size="sm" onClick={() => handleDeleteFarm(farm.id)}><Trash className="w-4 h-4" /></Button>
+                        <div>
+                          <h3 className="font-semibold text-gray-900">{farm.name}</h3>
+                          <p className="text-sm text-gray-500">{farm.crops_of_interest?.[0] || 'Culture non précisée'}</p>
+                          <p className="text-xs text-gray-400 mt-1">
+                            <MapPin className="w-3 h-3 inline mr-1" />
+                            ({farm.centroid?.lat.toFixed(2)}, {farm.centroid?.lon.toFixed(2)})
+                          </p>
                         </div>
                       </div>
-                    </CardContent>
-                    <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-primary-500 to-earth-500 opacity-0 hover:opacity-100 transition-opacity duration-300" />
-                  </Card>
-                ))
-              )}
-            </StaggeredContainer>
-          </RevealOnScroll>
+                      <div className="flex items-center gap-4 text-sm text-gray-600 min-w-[200px] hidden lg:flex">
+                        <div className="flex items-center gap-1"><Calendar className="w-4 h-4" /><span>Créée le {farm.createdAt ? formatDate(farm.createdAt) : 'Date inconnue'}</span></div>
+                        <div className="flex items-center gap-1"><Clock className="w-4 h-4" /><span>Mise à jour : {farm.updatedAt ? formatDate(farm.updatedAt) : 'Date inconnue'}</span></div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Link to={`/monitoring?farm=${farm.id}`}><Button variant="ghost" size="sm"><Eye className="w-4 h-4 mr-1" />Surveillance</Button></Link>
+                        <Link to={`/crops?farm=${farm.id}`}><Button variant="ghost" size="sm"><GitBranch className="w-4 h-4 mr-1" />Rotation</Button></Link>
+                        <Link to={`/reports?farm=${farm.id}`}><Button variant="ghost" size="sm"><FileText className="w-4 h-4 mr-1" />Rapport</Button></Link>
+                        <CollectDataDialog open={collectDialogOpen && selectedFarm?.id === farm.id} onOpenChange={setCollectDialogOpen} farm={farm} onCollectionStarted={handleCollectionStarted} />
+                        <Button variant="ghost" size="sm" onClick={() => { setSelectedFarm(farm); setCollectDialogOpen(true); }}><RefreshCw className="w-4 h-4 mr-1" />Collecter les données</Button>
+                        <Button variant="ghost" size="sm" onClick={() => handleDeleteFarm(farm.id)}><Trash className="w-4 h-4" /></Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                  <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-primary-500 to-earth-500 opacity-0 hover:opacity-100 transition-opacity duration-300" />
+                </Card>
+              ))
+            )}
+          </div>
         </TabsContent>
 
-        <TabsContent value="details" transition="fade">
-          <RevealOnScroll transition="slide-up" delay={100}>
-            <StaggeredContainer staggerDelay={80} transition="stagger-slide-up" className="mt-6 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-              {filteredFarms.map((farm) => (
-                <Card key={farm.id} variant="elevated" hover className="h-full overflow-hidden">
-                  <CardHeader>
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <h3 className="font-semibold text-gray-900">{farm.name}</h3>
-                        <p className="text-sm text-gray-500">Coordinates: ({farm.centroid?.lat.toFixed(3)}, {farm.centroid?.lon.toFixed(3)})</p>
-                      </div>
+        <TabsContent value="details" transition="slide">
+          <div className="mt-6 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {filteredFarms.map((farm, index) => (
+              <Card key={farm.id} variant="elevated" hover className="h-full overflow-hidden animate-fade-in" style={{ animationDelay: `${index * 80}ms` }}>
+                <CardHeader>
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <h3 className="font-semibold text-gray-900">{farm.name}</h3>
+                      <p className="text-sm text-gray-500">Coordonnées : ({farm.centroid?.lat.toFixed(3)}, {farm.centroid?.lon.toFixed(3)})</p>
                     </div>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4 text-sm animate-slide-up">
-                      <div><p className="text-gray-500">Crop(s) of Interest</p><p className="font-medium text-gray-900">{farm.crops_of_interest?.join(', ') || 'Not specified'}</p></div>
-                      <div><p className="text-gray-500">Description</p><p className="font-medium text-gray-900">{farm.description || 'No description'}</p></div>
-                    </div>
-                    <div className="p-3 rounded-lg bg-gray-50 text-sm animate-fade-in">
-                      <p className="text-gray-500">Créé : {farm.createdAt ? formatDate(farm.createdAt) : 'Unknown'}</p>
-                      <p className="text-gray-500">Mis à jour : {farm.updatedAt ? formatDate(farm.updatedAt) : 'Unknown'}</p>
-                    </div>
-                    <div className="flex gap-2 pt-2 border-t border-gray-100 animate-fade-in">
-                      <Link to={`/monitoring?farm=${farm.id}`} className="flex-1"><Button variant="secondary" size="sm" className="w-full"><Eye className="w-4 h-4 mr-1" />Surveillance</Button></Link>
-                      <Link to={`/crops?farm=${farm.id}`} className="flex-1"><Button variant="secondary" size="sm" className="w-full"><GitBranch className="w-4 h-4 mr-1" />Rotation</Button></Link>
-                      <CollectDataDialog open={collectDialogOpen && selectedFarm?.id === farm.id} onOpenChange={setCollectDialogOpen} farm={farm} onCollectionStarted={handleCollectionStarted} />
-                      <Button variant="primary" size="sm" className="w-full" onClick={() => { setSelectedFarm(farm); setCollectDialogOpen(true); }}><RefreshCw className="w-4 h-4 mr-1" />Collect Data</Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </StaggeredContainer>
-          </RevealOnScroll>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4 text-sm animate-slide-up">
+                    <div><p className="text-gray-500">Cultures déclarées</p><p className="font-medium text-gray-900">{farm.crops_of_interest?.join(', ') || 'Non renseignées'}</p></div>
+                    <div><p className="text-gray-500">Description</p><p className="font-medium text-gray-900">{farm.description || 'Aucune description'}</p></div>
+                  </div>
+                  <div className="p-3 rounded-lg bg-gray-50 text-sm animate-fade-in">
+                    <p className="text-gray-500">Créée le {farm.createdAt ? formatDate(farm.createdAt) : 'Date inconnue'}</p>
+                    <p className="text-gray-500">Mise à jour : {farm.updatedAt ? formatDate(farm.updatedAt) : 'Date inconnue'}</p>
+                  </div>
+                  <div className="flex gap-2 pt-2 border-t border-gray-100 animate-fade-in">
+                    <Link to={`/monitoring?farm=${farm.id}`} className="flex-1"><Button variant="secondary" size="sm" className="w-full"><Eye className="w-4 h-4 mr-1" />Surveillance</Button></Link>
+                    <Link to={`/crops?farm=${farm.id}`} className="flex-1"><Button variant="secondary" size="sm" className="w-full"><GitBranch className="w-4 h-4 mr-1" />Rotation</Button></Link>
+                    <CollectDataDialog open={collectDialogOpen && selectedFarm?.id === farm.id} onOpenChange={setCollectDialogOpen} farm={farm} onCollectionStarted={handleCollectionStarted} />
+                    <Button variant="primary" size="sm" className="w-full" onClick={() => { setSelectedFarm(farm); setCollectDialogOpen(true); }}><RefreshCw className="w-4 h-4 mr-1" />Collecter les données</Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         </TabsContent>
       </Tabs>
 
@@ -814,8 +829,26 @@ export default function Farms() {
   )
 }
 
-// Farm Map View Component
-function FarmMapView({ farms, onFarmClick }: { farms: Farm[]; onFarmClick: (farm: Farm) => void }) {
+function createFarmPopup(farm: Farm) {
+  const content = document.createElement('div')
+  content.className = 'min-w-[180px] p-2'
+  const title = document.createElement('p')
+  title.className = 'font-medium text-gray-900'
+  title.textContent = farm.name
+  const crops = document.createElement('p')
+  crops.className = 'text-sm text-gray-500'
+  crops.textContent = farm.crops_of_interest?.join(', ') || 'Culture non précisée'
+  const coordinates = document.createElement('p')
+  coordinates.className = 'font-mono text-xs text-gray-400'
+  coordinates.textContent = `${farm.centroid.lat.toFixed(4)}, ${farm.centroid.lon.toFixed(4)}`
+  content.append(title, crops, coordinates)
+  return new maplibregl.Popup({ offset: 25, closeButton: true })
+    .setLngLat([farm.centroid.lon, farm.centroid.lat])
+    .setDOMContent(content)
+}
+
+// Carte des parcelles
+function FarmMapView({ farms }: { farms: Farm[] }) {
   const mapContainerRef = React.useRef<HTMLDivElement>(null)
   const mapRef = React.useRef<maplibregl.Map | null>(null)
   const markersRef = React.useRef<Map<Farm['id'], maplibregl.Marker>>(new Map() as Map<Farm['id'], maplibregl.Marker>)
@@ -851,12 +884,9 @@ function FarmMapView({ farms, onFarmClick }: { farms: Farm[]; onFarmClick: (farm
         el.innerHTML = '<div class="w-2 h-2 bg-white rounded-full"></div>'
         el.title = farm.name
         const marker = new maplibregl.Marker({ element: el }).setLngLat([farm.centroid.lon, farm.centroid.lat]).addTo(map)
-        el.addEventListener('click', (e) => { e.stopPropagation(); onFarmClick(farm) })
-        const popup = new maplibregl.Popup({ offset: 25, closeButton: false })
-          .setLngLat([farm.centroid.lon, farm.centroid.lat])
-          .setHTML(`<div class="p-2 min-w-[180px]"><p class="font-medium text-gray-900">${farm.name}</p><p class="text-sm text-gray-500">${farm.crops_of_interest?.join(', ') || 'No crop'}</p><p class="text-xs text-gray-400 font-mono">${farm.centroid.lat.toFixed(4)}, ${farm.centroid.lon.toFixed(4)}</p></div>`)
-        el.addEventListener('mouseenter', () => popup.addTo(map))
-        el.addEventListener('mouseleave', () => popup.remove())
+        const popup = createFarmPopup(farm)
+        el.addEventListener('click', (event) => { event.stopPropagation(); popup.addTo(map) })
+
         markersRef.current.set(farm.id, marker)
       })
       if (farms.length > 1) {
@@ -867,7 +897,7 @@ function FarmMapView({ farms, onFarmClick }: { farms: Farm[]; onFarmClick: (farm
       mapRef.current = map
       return () => { markersRef.current.forEach(marker => marker.remove()); markersRef.current.clear(); map.remove(); mapRef.current = null }
     } catch (error) { console.error('Failed to initialize farm map:', error) }
-  }, [farms, onFarmClick])
+  }, [farms])
 
   React.useEffect(() => {
     if (!mapRef.current) return
@@ -881,16 +911,13 @@ function FarmMapView({ farms, onFarmClick }: { farms: Farm[]; onFarmClick: (farm
         el.innerHTML = '<div class="w-2 h-2 bg-white rounded-full"></div>'
         el.title = farm.name
         const marker = new maplibregl.Marker({ element: el }).setLngLat([farm.centroid.lon, farm.centroid.lat]).addTo(mapRef.current!)
-        el.addEventListener('click', (e) => { e.stopPropagation(); onFarmClick(farm) })
-        const popup = new maplibregl.Popup({ offset: 25, closeButton: false })
-          .setLngLat([farm.centroid.lon, farm.centroid.lat])
-          .setHTML(`<div class="p-2 min-w-[180px]"><p class="font-medium text-gray-900">${farm.name}</p><p class="text-sm text-gray-500">${farm.crops_of_interest?.join(', ') || 'No crop'}</p><p class="text-xs text-gray-400 font-mono">${farm.centroid.lat.toFixed(4)}, ${farm.centroid.lon.toFixed(4)}</p></div>`)
-        el.addEventListener('mouseenter', () => popup.addTo(mapRef.current!))
-        el.addEventListener('mouseleave', () => popup.remove())
+        const popup = createFarmPopup(farm)
+        el.addEventListener('click', (event) => { event.stopPropagation(); popup.addTo(mapRef.current!) })
+
         markersRef.current.set(farm.id, marker)
       }
     })
-  }, [farms, onFarmClick])
+  }, [farms])
 
   return <div ref={mapContainerRef} className="w-full h-96" />
 }

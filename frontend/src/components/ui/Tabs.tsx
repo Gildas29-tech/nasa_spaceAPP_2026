@@ -14,6 +14,7 @@ const TabsContext = createContext<TabsContextType | null>(null)
 interface TabsProps {
   children: ReactNode
   defaultValue: string
+  value?: string
   onChange?: (value: string) => void
   className?: string
   variant?: 'default' | 'underline' | 'pills' | 'segments'
@@ -21,25 +22,17 @@ interface TabsProps {
   transition?: 'fade' | 'slide' | 'scale' | 'none'
 }
 
-export function Tabs({ children, defaultValue, onChange, className, variant = 'default', animated = true, transition = 'fade' }: TabsProps) {
-  const [activeTab, setActiveTab] = useState(defaultValue)
-  const [previousTab, setPreviousTab] = useState(defaultValue)
-  const [isTransitioning, setIsTransitioning] = useState(false)
+export function Tabs({ children, defaultValue, value, onChange, className, variant = 'default', animated = true, transition = 'fade' }: TabsProps) {
+  const [activeTab, setActiveTab] = useState(value ?? defaultValue)
 
-  const handleTabChange = (value: string) => {
-    if (value === activeTab) return
-    if (animated) {
-      setIsTransitioning(true)
-      setPreviousTab(activeTab)
-      // Small delay to allow exit animation
-      setTimeout(() => {
-        setActiveTab(value)
-        setIsTransitioning(false)
-      }, 150)
-    } else {
-      setActiveTab(value)
-    }
-    onChange?.(value)
+  useEffect(() => {
+    if (value !== undefined) setActiveTab(value)
+  }, [value])
+
+  const handleTabChange = (newValue: string) => {
+    if (newValue === activeTab) return
+    setActiveTab(newValue)
+    onChange?.(newValue)
   }
 
   return (
@@ -177,30 +170,35 @@ export function TabsContent({ value, children, className, transition }: TabsCont
   const { activeTab, animated = true, transition: contextTransition = 'fade' } = context
   const effectiveTransition = transition || contextTransition
   const isActive = activeTab === value
+
+  // Simple approach: always render content, use CSS to show/hide
+  // This ensures content is mounted and can be measured by IntersectionObserver
   const [isMounted, setIsMounted] = useState(isActive)
-  const [isVisible, setIsVisible] = useState(isActive)
-  const contentRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (isActive) {
       setIsMounted(true)
-      // Trigger enter animation
-      requestAnimationFrame(() => {
-        setIsVisible(true)
-      })
-    } else if (isVisible) {
-      // Trigger exit animation
-      setIsVisible(false)
-      // Unmount after exit animation
-      setTimeout(() => {
-        if (activeTab !== value) {
-          setIsMounted(false)
-        }
-      }, animated ? 200 : 0)
     }
-  }, [isActive, animated, value, activeTab])
+  }, [isActive])
 
-  if (!isMounted) return null
+  // Keep content mounted once it's been shown (for proper rendering of charts/lists)
+  // But apply visibility styles for animation
+  const [isVisible, setIsVisible] = useState(isActive)
+
+  useEffect(() => {
+    if (animated && !isActive && isMounted) {
+      // Exit animation
+      setIsVisible(false)
+      // Delay unmounting to allow exit animation
+      const timer = setTimeout(() => {
+        // We don't actually unmount, just keep hidden
+      }, 200)
+      return () => clearTimeout(timer)
+    } else if (isActive) {
+      // Enter animation
+      requestAnimationFrame(() => setIsVisible(true))
+    }
+  }, [isActive, animated, isMounted])
 
   const transitionStyles = {
     fade: isVisible ? 'animate-tab-fade-enter' : 'animate-tab-fade-exit',
@@ -213,7 +211,6 @@ export function TabsContent({ value, children, className, transition }: TabsCont
 
   return (
     <div
-      ref={contentRef}
       role="tabpanel"
       id={`tabs-panel-${value}`}
       aria-labelledby={`tabs-trigger-${value}`}
@@ -229,6 +226,10 @@ export function TabsContent({ value, children, className, transition }: TabsCont
                    effectiveTransition === 'slide' && isVisible ? 'translateX(0)' :
                    effectiveTransition === 'scale' && !isVisible ? 'scale(0.95)' :
                    effectiveTransition === 'scale' && isVisible ? 'scale(1)' : 'none',
+        // Ensure content takes space even when hidden (for charts)
+        position: isVisible ? 'relative' : 'absolute',
+        width: isVisible ? '100%' : '100%',
+        pointerEvents: isVisible ? 'auto' : 'none',
       }}
     >
       {children}

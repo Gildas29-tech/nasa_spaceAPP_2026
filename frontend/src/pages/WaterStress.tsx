@@ -39,7 +39,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '../components/ui/Tabs'
 import { api } from '../lib/api'
 import { useFarmStore, type Farm } from '../stores/farmStore'
 import { useUIStore } from '../stores/uiStore'
-import { AnimatedPage, RevealOnScroll, StaggeredContainer } from '../components/PageTransition'
+import { AnimatedPage, StaggeredContainer } from '../components/PageTransition'
 import { Skeleton, CardSkeleton, StatCardSkeleton, ChartSkeleton, TableSkeleton } from '../components/ui/Skeleton'
 
 interface WaterStressAlert {
@@ -123,21 +123,15 @@ function WaterStressSkeleton() {
     <AnimatedPage>
       <div className="space-y-6 animate-fade-in">
         <PageHero kicker="WaterWise" title="Stress hydrique" subtitle="L'eau du champ, l'alerte, et le moment d'irriguer." />
-
-        <RevealOnScroll transition="slide-up" delay={100}>
-          <CardSkeleton className="animate-stagger-slide-up" />
-        </RevealOnScroll>
-
-        <RevealOnScroll transition="slide-up" delay={200}>
-          <StaggeredContainer staggerDelay={80} transition="stagger-slide-up">
-            <StatCardSkeleton />
-            <StatCardSkeleton />
-            <StatCardSkeleton />
-            <StatCardSkeleton />
-            <StatCardSkeleton />
-            <StatCardSkeleton />
-          </StaggeredContainer>
-        </RevealOnScroll>
+        <CardSkeleton className="animate-fade-in" style={{ animationDelay: '100ms' }} />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4 animate-fade-in" style={{ animationDelay: '200ms' }}>
+          <StatCardSkeleton />
+          <StatCardSkeleton />
+          <StatCardSkeleton />
+          <StatCardSkeleton />
+          <StatCardSkeleton />
+          <StatCardSkeleton />
+        </div>
       </div>
     </AnimatedPage>
   )
@@ -145,42 +139,38 @@ function WaterStressSkeleton() {
 
 function ChartCard({ title, subtitle, icon, children, className, delay = 0, ...props }: any) {
   return (
-    <RevealOnScroll transition="slide-up" delay={delay} key={title}>
-      <Card variant="elevated" className={cn('hover-lift', className)} {...props}>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            {icon && <span className="p-1.5 rounded-lg bg-primary-100 text-primary-600">{icon}</span>}
-            <div>
-              <span>{title}</span>
-              {subtitle && <p className="text-xs text-gray-500 mt-0.5">{subtitle}</p>}
-            </div>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="animate-fade-in" style={{ animationDelay: '100ms' }}>
-          {children}
-        </CardContent>
-      </Card>
-    </RevealOnScroll>
+    <Card variant="elevated" className={cn('hover-lift animate-fade-in', className)} {...props} style={{ animationDelay: `${delay}ms` }}>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          {icon && <span className="p-1.5 rounded-lg bg-primary-100 text-primary-600">{icon}</span>}
+          <div>
+            <span>{title}</span>
+            {subtitle && <p className="text-xs text-gray-500 mt-0.5">{subtitle}</p>}
+          </div>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="animate-fade-in" style={{ animationDelay: '100ms' }}>
+        {children}
+      </CardContent>
+    </Card>
   )
 }
 
 function StatMetricCard({ icon: Icon, iconBg, label, value, delay = 0 }: any) {
   return (
-    <RevealOnScroll transition="scale-in" delay={delay}>
-      <Card variant="elevated" className="hover-lift">
-        <CardContent className="p-4 animate-fade-in">
-          <div className="flex items-center gap-3">
-            <div className={cn('p-3 rounded-xl', iconBg + '100')}>
-              <Icon className={cn('w-6 h-6', iconBg)} />
-            </div>
-            <div>
-              <p className="text-sm text-gray-500">{label}</p>
-              <p className="text-2xl font-bold text-gray-900 animate-count-up">{value}</p>
-            </div>
+    <Card variant="elevated" className="hover-lift" style={{ animationDelay: `${delay}ms` }}>
+      <CardContent className="p-4 animate-fade-in">
+        <div className="flex items-center gap-3">
+          <div className={cn('p-3 rounded-xl', iconBg + '100')}>
+            <Icon className={cn('w-6 h-6', iconBg)} />
           </div>
-        </CardContent>
-      </Card>
-    </RevealOnScroll>
+          <div>
+            <p className="text-sm text-gray-500">{label}</p>
+            <p className="text-2xl font-bold text-gray-900 animate-count-up">{value}</p>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   )
 }
 
@@ -191,112 +181,107 @@ function AlertCard({ alert, index }: { alert: WaterStressAlert; index: number })
   const Icon = getSeverityIcon(alert.severity)
 
   return (
-    <RevealOnScroll transition="slide-up" delay={index * 60}>
-      <Card
-        variant="elevated"
-        className={cn('border-l-4 hover-lift', severityColor.replace('bg-', 'border-l-').replace('text-', ''))}
-        hover
-      >
-        <CardContent className="p-4 animate-fade-in">
-          <div className="flex items-start gap-4">
-            <div className={cn('p-3 rounded-xl', severityColor.replace('text-', 'bg-').replace('border-', ''))}>
-              <Icon className="w-5 h-5" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <h4 className="font-semibold text-gray-900">{typeLabels[alert.type as keyof typeof typeLabels]}</h4>
-                  <Badge variant={alert.severity === 'critical' ? 'danger' : alert.severity === 'high' ? 'warning' : 'info'} size="sm" dot>
-                    {alert.severity.toUpperCase()}
-                  </Badge>
-                </div>
-                <span className="text-sm text-gray-500">{new Date(alert.detected_at).toLocaleString()}</span>
-              </div>
-              <p className="text-gray-600 mt-1">{alert.message}</p>
-              <div className="mt-3 flex flex-wrap gap-2 text-sm">
-                <span className="flex items-center gap-1 text-gray-500"><MapPin className="w-3 h-3" />{alert.field_name}</span>
-                <span className="flex items-center gap-1 text-gray-500"><Droplet className="w-3 h-3" />ET: {alert.et_value.toFixed(1)} mm (seuil: {alert.et_threshold.toFixed(1)})</span>
-                <span className="flex items-center gap-1 text-gray-500"><Thermometer className="w-3 h-3" />LST: {alert.lst_value.toFixed(1)}°C</span>
-                <span className="flex items-center gap-1 text-gray-500"><Waves className="w-3 h-3" />Sol: {alert.soil_moisture.toFixed(1)}%</span>
-                <span className="flex items-center gap-1 text-gray-500"><Cloud className="w-3 h-3" />Précip: {alert.precipitation_forecast.toFixed(1)} mm</span>
-              </div>
-              {alert.recommendations.length > 0 && (
-                <div className="mt-3 p-3 rounded-lg bg-gray-50 animate-slide-up">
-                  <p className="text-sm font-medium text-gray-900 mb-2">Recommandations:</p>
-                  <ul className="space-y-1 text-sm text-gray-600">
-                    {alert.recommendations.map((rec, j) => (
-                      <li key={j} className="flex items-center gap-2 animate-scale-in" style={{ animationDelay: `${j * 80}ms` }}>
-                        <CheckCircle className="w-4 h-4 text-green-500" />
-                        {rec}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
+    <Card
+      variant="elevated"
+      className={cn('border-l-4 hover-lift', severityColor.replace('bg-', 'border-l-').replace('text-', ''))}
+      hover
+      style={{ animationDelay: `${index * 60}ms` }}
+    >
+      <CardContent className="p-4 animate-fade-in">
+        <div className="flex items-start gap-4">
+          <div className={cn('p-3 rounded-xl', severityColor.replace('text-', 'bg-').replace('border-', ''))}>
+            <Icon className="w-5 h-5" />
           </div>
-        </CardContent>
-      </Card>
-    </RevealOnScroll>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <h4 className="font-semibold text-gray-900">{typeLabels[alert.type as keyof typeof typeLabels]}</h4>
+                <Badge variant={alert.severity === 'critical' ? 'danger' : alert.severity === 'high' ? 'warning' : 'info'} size="sm" dot>
+                  {alert.severity.toUpperCase()}
+                </Badge>
+              </div>
+              <span className="text-sm text-gray-500">{new Date(alert.detected_at).toLocaleString()}</span>
+            </div>
+            <p className="text-gray-600 mt-1">{alert.message}</p>
+            <div className="mt-3 flex flex-wrap gap-2 text-sm">
+              <span className="flex items-center gap-1 text-gray-500"><MapPin className="w-3 h-3" />{alert.field_name}</span>
+              <span className="flex items-center gap-1 text-gray-500"><Droplet className="w-3 h-3" />ET: {alert.et_value.toFixed(1)} mm (seuil: {alert.et_threshold.toFixed(1)})</span>
+              <span className="flex items-center gap-1 text-gray-500"><Thermometer className="w-3 h-3" />LST: {alert.lst_value.toFixed(1)}°C</span>
+              <span className="flex items-center gap-1 text-gray-500"><Waves className="w-3 h-3" />Sol: {alert.soil_moisture.toFixed(1)}%</span>
+              <span className="flex items-center gap-1 text-gray-500"><Cloud className="w-3 h-3" />Précip: {alert.precipitation_forecast.toFixed(1)} mm</span>
+            </div>
+            {alert.recommendations.length > 0 && (
+              <div className="mt-3 p-3 rounded-lg bg-gray-50 animate-slide-up">
+                <p className="text-sm font-medium text-gray-900 mb-2">Recommandations:</p>
+                <ul className="space-y-1 text-sm text-gray-600">
+                  {alert.recommendations.map((rec, j) => (
+                    <li key={j} className="flex items-center gap-2 animate-scale-in" style={{ animationDelay: `${j * 80}ms` }}>
+                      <CheckCircle className="w-4 h-4 text-green-500" />
+                      {rec}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   )
 }
 
 function IrrigationEventCard({ event, index }: { event: IrrigationEvent; index: number }) {
   return (
-    <RevealOnScroll transition="slide-up" delay={index * 60}>
-      <Card variant="elevated" className="hover-lift">
-        <CardContent className="p-4 animate-fade-in">
-          <div className="grid grid-cols-1 md:grid-cols-6 gap-4 items-center">
-            <div className="flex items-center gap-3 animate-scale-in">
-              <div className="p-3 rounded-xl bg-blue-100">
-                <Waves className="w-5 h-5 text-blue-600" />
-              </div>
-              <div>
-                <p className="font-medium text-gray-900">{new Date(event.date).toLocaleDateString()}</p>
-                <p className="text-sm text-gray-500">Irrigation Programmée</p>
-              </div>
+    <Card variant="elevated" className="hover-lift" style={{ animationDelay: `${index * 60}ms` }}>
+      <CardContent className="p-4 animate-fade-in">
+        <div className="grid grid-cols-1 md:grid-cols-6 gap-4 items-center">
+          <div className="flex items-center gap-3 animate-scale-in">
+            <div className="p-3 rounded-xl bg-blue-100">
+              <Waves className="w-5 h-5 text-blue-600" />
             </div>
-            <div className="text-center">
-              <p className="text-sm text-gray-500">Quantité</p>
-              <p className="font-semibold text-gray-900">{event.amount_mm} mm</p>
-            </div>
-            <div className="text-center">
-              <p className="text-sm text-gray-500">Méthode</p>
-              <p className="font-medium text-gray-900 capitalize">{event.method}</p>
-            </div>
-            <div className="text-center">
-              <p className="text-sm text-gray-500">Source</p>
-              <p className="font-medium text-gray-900 capitalize">{event.source}</p>
-            </div>
-            <div className="text-center">
-              <p className="text-sm text-gray-500">Efficacité</p>
-              <p className="font-semibold text-gray-900">{Math.round(event.efficiency * 100)}%</p>
-            </div>
-            <div className="text-center">
-              <p className="text-sm text-gray-500">Coût</p>
-              <p className="font-semibold text-gray-900">${event.cost.toFixed(2)}</p>
+            <div>
+              <p className="font-medium text-gray-900">{new Date(event.date).toLocaleDateString()}</p>
+              <p className="text-sm text-gray-500">Irrigation Programmée</p>
             </div>
           </div>
-        </CardContent>
-      </Card>
-    </RevealOnScroll>
+          <div className="text-center">
+            <p className="text-sm text-gray-500">Quantité</p>
+            <p className="font-semibold text-gray-900">{event.amount_mm} mm</p>
+          </div>
+          <div className="text-center">
+            <p className="text-sm text-gray-500">Méthode</p>
+            <p className="font-medium text-gray-900 capitalize">{event.method}</p>
+          </div>
+          <div className="text-center">
+            <p className="text-sm text-gray-500">Source</p>
+            <p className="font-medium text-gray-900 capitalize">{event.source}</p>
+          </div>
+          <div className="text-center">
+            <p className="text-sm text-gray-500">Efficacité</p>
+            <p className="font-semibold text-gray-900">{Math.round(event.efficiency * 100)}%</p>
+          </div>
+          <div className="text-center">
+            <p className="text-sm text-gray-500">Coût</p>
+            <p className="font-semibold text-gray-900">${event.cost.toFixed(2)}</p>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   )
 }
 
 function ModelPerformanceCard({ label, value, desc, icon, delay = 0 }: { label: string; value: string; desc: string; icon: any; delay?: number }) {
   return (
-    <RevealOnScroll transition="scale-in" delay={delay}>
-      <Card variant="elevated" className="hover-lift">
-        <CardContent className="p-4 animate-fade-in">
-          <div className="p-2 rounded-xl bg-primary-100 text-primary-600 w-12 h-12 flex items-center justify-center mb-3 animate-scale-in">
-            {icon}
-          </div>
-          <p className="text-2xl font-bold text-primary-600 animate-count-up">{value}</p>
-          <p className="text-sm text-gray-500 mt-1">{label}</p>
-          <p className="text-xs text-gray-400 mt-1">{desc}</p>
-        </CardContent>
-      </Card>
-    </RevealOnScroll>
+    <Card variant="elevated" className="hover-lift" style={{ animationDelay: `${delay}ms` }}>
+      <CardContent className="p-4 animate-fade-in">
+        <div className="p-2 rounded-xl bg-primary-100 text-primary-600 w-12 h-12 flex items-center justify-center mb-3 animate-scale-in">
+          {icon}
+        </div>
+        <p className="text-2xl font-bold text-primary-600 animate-count-up">{value}</p>
+        <p className="text-sm text-gray-500 mt-1">{label}</p>
+        <p className="text-xs text-gray-400 mt-1">{desc}</p>
+      </CardContent>
+    </Card>
   )
 }
 
@@ -384,466 +369,442 @@ export default function WaterStress({ farmId }: { farmId?: string }) {
   return (
     <AnimatedPage className="space-y-6">
       {/* Header */}
-      <RevealOnScroll transition="slide-up" delay={50}>
-        <PageHero
-          kicker="WaterWise"
-          title="Stress hydrique"
-          subtitle="L'eau du champ, l'alerte, et le moment d'irriguer."
-          actions={
-            <Button
-              onClick={handleAnalyze}
-              loading={loading}
-              disabled={!selectedFarm || loading}
-              className="hover-lift"
-            >
-              <RefreshCw className="w-4 h-4 mr-2" />
-              Lancer l'analyse
-            </Button>
-          }
-        />
-      </RevealOnScroll>
+      <PageHero
+        kicker="WaterWise"
+        title="Stress hydrique"
+        subtitle="L'eau du champ, l'alerte, et le moment d'irriguer."
+        actions={
+          <Button
+            onClick={handleAnalyze}
+            loading={loading}
+            disabled={!selectedFarm || loading}
+            className="hover-lift"
+          >
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Lancer l'analyse
+          </Button>
+        }
+      />
 
       {/* Configuration */}
-      <RevealOnScroll transition="slide-up" delay={100}>
-        <Card variant="elevated" className="border-l-4 border-l-blue-500 hover-lift">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Settings className="w-5 h-5 text-blue-600" />
-              Configuration de l'Analyse
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {selectedFarm && (
-              <div className="mb-4 p-3 rounded-lg bg-blue-50 border border-blue-200 animate-fade-in">
-                <p className="text-sm font-medium text-blue-800">Analyse pour : {selectedFarm.name}</p>
-                <p className="text-xs text-blue-700">La localisation sera auto-remplie depuis la géométrie de la ferme</p>
-              </div>
-            )}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4 mb-4">
-              <Input
-                label="Longitude Ouest"
-                type="number"
-                step="0.001"
-                value={formData.bbox[0]}
-                onChange={(e) => setFormData({...formData, bbox: [parseFloat(e.target.value), formData.bbox[1], formData.bbox[2], formData.bbox[3]]})}
-                placeholder="-122.5"
-              />
-              <Input
-                label="Latitude Sud"
-                type="number"
-                step="0.001"
-                value={formData.bbox[1]}
-                onChange={(e) => setFormData({...formData, bbox: [formData.bbox[0], parseFloat(e.target.value), formData.bbox[2], formData.bbox[3]]})}
-                placeholder="37.5"
-              />
-              <Input
-                label="Longitude Est"
-                type="number"
-                step="0.001"
-                value={formData.bbox[2]}
-                onChange={(e) => setFormData({...formData, bbox: [formData.bbox[0], formData.bbox[1], parseFloat(e.target.value), formData.bbox[3]]})}
-                placeholder="-121.5"
-              />
-              <Input
-                label="Latitude Nord"
-                type="number"
-                step="0.001"
-                value={formData.bbox[3]}
-                onChange={(e) => setFormData({...formData, bbox: [formData.bbox[0], formData.bbox[1], formData.bbox[2], parseFloat(e.target.value)]})}
-                placeholder="38.5"
-              />
-              <Select
-                label="Type de Culture"
-                value={formData.cropType}
-                onChange={(e) => setFormData({...formData, cropType: e.target.value})}
-                options={[
-                  { value: 'corn', label: 'Maïs' },
-                  { value: 'soybean', label: 'Soja' },
-                  { value: 'wheat', label: 'Blé' },
-                  { value: 'sorghum', label: 'Sorgho' },
-                  { value: 'alfalfa', label: 'Luzerne' },
-                  { value: 'cotton', label: 'Coton' },
-                  { value: 'rice', label: 'Riz' },
-                  { value: 'vegetables', label: 'Légumes' },
-                ]}
-              />
-              <Select
-                label="Texture du Sol"
-                value={formData.soilTexture}
-                onChange={(e) => setFormData({...formData, soilTexture: e.target.value})}
-                options={[
-                  { value: 'sand', label: 'Sable' },
-                  { value: 'loam', label: 'Limon' },
-                  { value: 'clay', label: 'Argile' },
-                  { value: 'silt', label: 'Silt' },
-                  { value: 'sandy_loam', label: 'Limon Sableux' },
-                  { value: 'clay_loam', label: 'Limon Argileux' },
-                ]}
-              />
+      <Card variant="elevated" className="border-l-4 border-l-blue-500 hover-lift animate-fade-in" style={{ animationDelay: '100ms' }}>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Settings className="w-5 h-5 text-blue-600" />
+            Configuration de l'Analyse
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {selectedFarm && (
+            <div className="mb-4 p-3 rounded-lg bg-blue-50 border border-blue-200 animate-fade-in">
+              <p className="text-sm font-medium text-blue-800">Analyse pour : {selectedFarm.name}</p>
+              <p className="text-xs text-blue-700">La localisation sera auto-remplie depuis la géométrie de la ferme</p>
             </div>
+          )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4 mb-4">
+            <Input
+              label="Longitude Ouest"
+              type="number"
+              step="0.001"
+              value={formData.bbox[0]}
+              onChange={(e) => setFormData({...formData, bbox: [parseFloat(e.target.value), formData.bbox[1], formData.bbox[2], formData.bbox[3]]})}
+              placeholder="-122.5"
+            />
+            <Input
+              label="Latitude Sud"
+              type="number"
+              step="0.001"
+              value={formData.bbox[1]}
+              onChange={(e) => setFormData({...formData, bbox: [formData.bbox[0], parseFloat(e.target.value), formData.bbox[2], formData.bbox[3]]})}
+              placeholder="37.5"
+            />
+            <Input
+              label="Longitude Est"
+              type="number"
+              step="0.001"
+              value={formData.bbox[2]}
+              onChange={(e) => setFormData({...formData, bbox: [formData.bbox[0], formData.bbox[1], parseFloat(e.target.value), formData.bbox[3]]})}
+              placeholder="-121.5"
+            />
+            <Input
+              label="Latitude Nord"
+              type="number"
+              step="0.001"
+              value={formData.bbox[3]}
+              onChange={(e) => setFormData({...formData, bbox: [formData.bbox[0], formData.bbox[1], formData.bbox[2], parseFloat(e.target.value)]})}
+              placeholder="38.5"
+            />
+            <Select
+              label="Type de Culture"
+              value={formData.cropType}
+              onChange={(e) => setFormData({...formData, cropType: e.target.value})}
+              options={[
+                { value: 'corn', label: 'Maïs' },
+                { value: 'soybean', label: 'Soja' },
+                { value: 'wheat', label: 'Blé' },
+                { value: 'sorghum', label: 'Sorgho' },
+                { value: 'alfalfa', label: 'Luzerne' },
+                { value: 'cotton', label: 'Coton' },
+                { value: 'rice', label: 'Riz' },
+                { value: 'vegetables', label: 'Légumes' },
+              ]}
+            />
+            <Select
+              label="Texture du Sol"
+              value={formData.soilTexture}
+              onChange={(e) => setFormData({...formData, soilTexture: e.target.value})}
+              options={[
+                { value: 'sand', label: 'Sable' },
+                { value: 'loam', label: 'Limon' },
+                { value: 'clay', label: 'Argile' },
+                { value: 'silt', label: 'Silt' },
+                { value: 'sandy_loam', label: 'Limon Sableux' },
+                { value: 'clay_loam', label: 'Limon Argileux' },
+              ]}
+            />
+          </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-              <Input
-                label="Date de début"
-                type="date"
-                value={formData.startDate}
-                onChange={(e) => setFormData({...formData, startDate: e.target.value})}
-              />
-              <Input
-                label="Date de fin"
-                type="date"
-                value={formData.endDate}
-                onChange={(e) => setFormData({...formData, endDate: e.target.value})}
-              />
-              <Select
-                label="Méthode d'Irrigation"
-                value={formData.irrigationMethod}
-                onChange={(e) => setFormData({...formData, irrigationMethod: e.target.value})}
-                options={[
-                  { value: 'drip', label: 'Goutte à goutte' },
-                  { value: 'sprinkler', label: 'Aspersion' },
-                  { value: 'pivot', label: 'Pivot Central' },
-                  { value: 'flood', label: 'Gravitaire' },
-                ]}
-              />
-            </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+            <Input
+              label="Date de début"
+              type="date"
+              value={formData.startDate}
+              onChange={(e) => setFormData({...formData, startDate: e.target.value})}
+            />
+            <Input
+              label="Date de fin"
+              type="date"
+              value={formData.endDate}
+              onChange={(e) => setFormData({...formData, endDate: e.target.value})}
+            />
+            <Select
+              label="Méthode d'Irrigation"
+              value={formData.irrigationMethod}
+              onChange={(e) => setFormData({...formData, irrigationMethod: e.target.value})}
+              options={[
+                { value: 'drip', label: 'Goutte à goutte' },
+                { value: 'sprinkler', label: 'Aspersion' },
+                { value: 'pivot', label: 'Pivot Central' },
+                { value: 'flood', label: 'Gravitaire' },
+              ]}
+            />
+          </div>
 
-            <div className="flex gap-2">
-              <Button onClick={handleAnalyze} loading={loading} className="flex-1 hover-lift" disabled={!selectedFarm || loading}>
-                <Zap className="w-4 h-4 mr-2" />
-                Analyser le Stress Hydrique
-              </Button>
-              <Button variant="secondary" className="hover-lift">Sauvegarder la Config</Button>
-            </div>
-          </CardContent>
-        </Card>
-      </RevealOnScroll>
+          <div className="flex gap-2">
+            <Button onClick={handleAnalyze} loading={loading} className="flex-1 hover-lift" disabled={!selectedFarm || loading}>
+              <Zap className="w-4 h-4 mr-2" />
+              Analyser le Stress Hydrique
+            </Button>
+            <Button variant="secondary" className="hover-lift">Sauvegarder la Config</Button>
+          </div>
+        </CardContent>
+      </Card>
 
       {error && (
-        <RevealOnScroll transition="shake" delay={150}>
-          <Card variant="outlined" className="border-red-200 bg-red-50 animate-shake">
-            <CardContent className="p-4 flex items-center gap-3 text-red-700">
-              <AlertTriangle className="w-5 h-5" />
-              <span>{error}</span>
-              <Button variant="ghost" size="sm" onClick={handleAnalyze} className="ml-auto hover-lift">
-                <RefreshCw className="w-4 h-4 mr-1" />
-                Réessayer
-              </Button>
-            </CardContent>
-          </Card>
-        </RevealOnScroll>
+        <Card variant="outlined" className="border-red-200 bg-red-50 animate-shake animate-fade-in" style={{ animationDelay: '150ms' }}>
+          <CardContent className="p-4 flex items-center gap-3 text-red-700">
+            <AlertTriangle className="w-5 h-5" />
+            <span>{error}</span>
+            <Button variant="ghost" size="sm" onClick={handleAnalyze} className="ml-auto hover-lift">
+              <RefreshCw className="w-4 h-4 mr-1" />
+              Réessayer
+            </Button>
+          </CardContent>
+        </Card>
       )}
 
       {/* Quick Stats */}
       {results && waterBalance && (
-        <RevealOnScroll transition="slide-up" delay={showResults ? 200 : 1000}>
-          <StaggeredContainer staggerDelay={80} transition="stagger-slide-up" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
-            <StatMetricCard icon={Droplet} iconBg="bg-blue-600" label="ET Actuelle" value={`${waterBalance.current_et.toFixed(1)} mm/jour`} delay={0} />
-            <StatMetricCard icon={Sun} iconBg="bg-green-600" label="ET Potentielle" value={`${waterBalance.potential_et.toFixed(1)} mm/jour`} delay={80} />
-            <StatMetricCard icon={Waves} iconBg="bg-amber-600" label="Humidité Sol" value={`${waterBalance.soil_moisture.toFixed(1)}%`} delay={160} />
-            <StatMetricCard icon={Droplet} iconBg="bg-blue-600" label="Eau Disponible" value={`${waterBalance.available_water.toFixed(1)} mm`} delay={240} />
-            <StatMetricCard icon={AlertTriangle} iconBg="bg-red-600" label="Jours avant Stress" value={waterBalance.days_to_stress} delay={320} />
-            <StatMetricCard icon={ShieldCheck} iconBg="bg-purple-600" label="Alertes Actives" value={filteredAlerts.length} delay={400} />
-          </StaggeredContainer>
-        </RevealOnScroll>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4 animate-fade-in" style={{ animationDelay: '200ms' }}>
+          <StatMetricCard icon={Droplet} iconBg="bg-blue-600" label="ET Actuelle" value={`${waterBalance.current_et.toFixed(1)} mm/jour`} delay={0} />
+          <StatMetricCard icon={Sun} iconBg="bg-green-600" label="ET Potentielle" value={`${waterBalance.potential_et.toFixed(1)} mm/jour`} delay={80} />
+          <StatMetricCard icon={Waves} iconBg="bg-amber-600" label="Humidité Sol" value={`${waterBalance.soil_moisture.toFixed(1)}%`} delay={160} />
+          <StatMetricCard icon={Droplet} iconBg="bg-blue-600" label="Eau Disponible" value={`${waterBalance.available_water.toFixed(1)} mm`} delay={240} />
+          <StatMetricCard icon={AlertTriangle} iconBg="bg-red-600" label="Jours avant Stress" value={waterBalance.days_to_stress} delay={320} />
+          <StatMetricCard icon={ShieldCheck} iconBg="bg-purple-600" label="Alertes Actives" value={filteredAlerts.length} delay={400} />
+        </div>
       )}
 
       {/* Tabs */}
-      <RevealOnScroll transition="slide-up" delay={showResults ? 250 : 1100}>
-        <Tabs defaultValue="alerts" onChange={setActiveTab} className="w-full" animated transition="fade">
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="alerts" icon={<AlertTriangle className="w-4 h-4" />}>Alertes</TabsTrigger>
-            <TabsTrigger value="irrigation" icon={<CalendarDays className="w-4 h-4" />}>Irrigation</TabsTrigger>
-            <TabsTrigger value="et_data" icon={<BarChart3 className="w-4 h-4" />}>Analyse ET</TabsTrigger>
-            <TabsTrigger value="water_balance" icon={<Gauge className="w-4 h-4" />}>Bilan Hydrique</TabsTrigger>
-          </TabsList>
+      <Tabs defaultValue="alerts" onChange={setActiveTab} className="w-full" animated transition="slide">
+        <TabsList className="grid w-full grid-cols-4">
+          <TabsTrigger value="alerts" icon={<AlertTriangle className="w-4 h-4" />}>Alertes</TabsTrigger>
+          <TabsTrigger value="irrigation" icon={<CalendarDays className="w-4 h-4" />}>Irrigation</TabsTrigger>
+          <TabsTrigger value="et_data" icon={<BarChart3 className="w-4 h-4" />}>Analyse ET</TabsTrigger>
+          <TabsTrigger value="water_balance" icon={<Gauge className="w-4 h-4" />}>Bilan Hydrique</TabsTrigger>
+        </TabsList>
 
-          {/* Alerts Tab */}
-          <TabsContent value="alerts" transition="fade">
-            <RevealOnScroll transition="slide-up" delay={100}>
-              <div className="mt-4">
-                <div className="flex items-center justify-between mb-4 animate-fade-in">
-                  <h3 className="text-lg font-semibold">Alertes de Stress Hydrique</h3>
-                  <div className="flex gap-2">
-                    {['critical', 'high', 'medium', 'low'].map((s) => (
-                      <label key={s} className="flex items-center gap-1 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={severityFilter.includes(s)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setSeverityFilter([...severityFilter, s])
-                            } else {
-                              setSeverityFilter(severityFilter.filter(x => x !== s))
-                            }
-                          }}
-                          className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+        {/* Alerts Tab */}
+        <TabsContent value="alerts" transition="slide">
+          <div className="mt-4">
+            <div className="flex items-center justify-between mb-4 animate-fade-in">
+              <h3 className="text-lg font-semibold">Alertes de Stress Hydrique</h3>
+              <div className="flex gap-2">
+                {['critical', 'high', 'medium', 'low'].map((s) => (
+                  <label key={s} className="flex items-center gap-1 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={severityFilter.includes(s)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSeverityFilter([...severityFilter, s])
+                        } else {
+                          setSeverityFilter(severityFilter.filter(x => x !== s))
+                        }
+                      }}
+                      className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                    />
+                    <span className={`text-xs font-medium capitalize ${getSeverityColor(s).split(' ')[0]}`}>
+                      {s}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {filteredAlerts.length > 0 ? (
+              <div className="space-y-3">
+                {filteredAlerts.map((alert, i) => (
+                  <AlertCard key={i} alert={alert} index={i} />
+                ))}
+              </div>
+            ) : (
+              <Card variant="elevated" className="hover-lift animate-fade-in">
+                <CardContent className="p-12 text-center animate-fade-in">
+                  <CheckCircle className="w-12 h-12 mx-auto text-green-400 mb-4 animate-float" />
+                  <h3 className="text-lg font-semibold text-gray-900 mb-1">Aucune Alerte Active</h3>
+                  <p className="text-gray-500">Aucune alerte de stress hydrique détectée pour les filtres sélectionnés</p>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </TabsContent>
+
+        {/* Irrigation Schedule Tab */}
+        <TabsContent value="irrigation" transition="slide">
+          <div className="mt-4 animate-fade-in">
+            <h3 className="text-lg font-semibold mb-4">Programme d'Irrigation</h3>
+            {results?.irrigation_schedule && results.irrigation_schedule.length > 0 ? (
+              <div className="space-y-3">
+                {results.irrigation_schedule.map((event, i) => (
+                  <IrrigationEventCard key={i} event={event} index={i} />
+                ))}
+              </div>
+            ) : (
+              <Card variant="elevated" className="hover-lift animate-fade-in">
+                <CardContent className="p-12 text-center animate-fade-in">
+                  <CalendarDays className="w-12 h-12 mx-auto text-gray-300 mb-4 animate-float" />
+                  <h3 className="text-lg font-semibold text-gray-900 mb-1">Aucun Programme d'Irrigation</h3>
+                  <p className="text-gray-500">Lancez l'analyse de stress hydrique pour générer des recommandations d'irrigation</p>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </TabsContent>
+
+        {/* ET Analysis Tab */}
+        <TabsContent value="et_data" transition="slide">
+          <div className="mt-4 animate-fade-in">
+            <h3 className="text-lg font-semibold mb-4">Analyse d'Évapotranspiration</h3>
+            {results?.et_data && results.et_data.length > 0 ? (
+              <div className="space-y-6">
+                <ChartCard
+                  title="ET Actuelle vs Potentielle (30 derniers jours)"
+                  icon={<BarChart3 className="w-5 h-5" />}
+                  delay={0}
+                >
+                  <div className="h-80 flex items-end justify-center gap-2 px-4 animate-fade-in">
+                    {results.et_data.slice(-30).map((d, i) => (
+                      <div key={i} className="flex-1 max-w-10 flex flex-col items-center">
+                        <div
+                          className="w-full bg-blue-500 rounded-t transition-all duration-500 hover:bg-blue-600 hover-lift"
+                          style={{ height: `${Math.max(2, d.et_actual * 8)}px` }}
                         />
-                        <span className={`text-xs font-medium capitalize ${getSeverityColor(s).split(' ')[0]}`}>
-                          {s}
-                        </span>
-                      </label>
+                        <div className="w-full bg-gray-200 rounded-t mt-1 transition-all duration-500" style={{ height: `${Math.max(2, d.et_potential * 8)}px` }} />
+                        <span className="text-xs text-gray-500 mt-2">{new Date(d.date).toLocaleDateString()}</span>
+                      </div>
                     ))}
                   </div>
-                </div>
+                  <div className="flex items-center gap-4 text-sm text-gray-500 mt-4 animate-fade-in">
+                    <div className="flex items-center gap-1"><div className="w-4 h-4 bg-blue-500 rounded" /><span>ET Actuelle</span></div>
+                    <div className="flex items-center gap-1"><div className="w-4 h-4 bg-gray-300 rounded" /><span>ET Potentielle</span></div>
+                  </div>
+                </ChartCard>
 
-                {filteredAlerts.length > 0 ? (
-                  <StaggeredContainer staggerDelay={60} transition="stagger-slide-up" className="space-y-3">
-                    {filteredAlerts.map((alert, i) => (
-                      <AlertCard key={i} alert={alert} index={i} />
-                    ))}
-                  </StaggeredContainer>
-                ) : (
-                  <Card variant="elevated" className="hover-lift">
-                    <CardContent className="p-12 text-center animate-fade-in">
-                      <CheckCircle className="w-12 h-12 mx-auto text-green-400 mb-4 animate-float" />
-                      <h3 className="text-lg font-semibold text-gray-900 mb-1">Aucune Alerte Active</h3>
-                      <p className="text-gray-500">Aucune alerte de stress hydrique détectée pour les filtres sélectionnés</p>
-                    </CardContent>
-                  </Card>
-                )}
-              </div>
-            </RevealOnScroll>
-          </TabsContent>
-
-          {/* Irrigation Schedule Tab */}
-          <TabsContent value="irrigation" transition="fade">
-            <RevealOnScroll transition="slide-up" delay={100}>
-              <div className="mt-4 animate-fade-in">
-                <h3 className="text-lg font-semibold mb-4">Programme d'Irrigation</h3>
-                {results?.irrigation_schedule && results.irrigation_schedule.length > 0 ? (
-                  <StaggeredContainer staggerDelay={60} transition="stagger-slide-up" className="space-y-3">
-                    {results.irrigation_schedule.map((event, i) => (
-                      <IrrigationEventCard key={i} event={event} index={i} />
-                    ))}
-                  </StaggeredContainer>
-                ) : (
-                  <Card variant="elevated" className="hover-lift">
-                    <CardContent className="p-12 text-center animate-fade-in">
-                      <CalendarDays className="w-12 h-12 mx-auto text-gray-300 mb-4 animate-float" />
-                      <h3 className="text-lg font-semibold text-gray-900 mb-1">Aucun Programme d'Irrigation</h3>
-                      <p className="text-gray-500">Lancez l'analyse de stress hydrique pour générer des recommandations d'irrigation</p>
-                    </CardContent>
-                  </Card>
-                )}
-              </div>
-            </RevealOnScroll>
-          </TabsContent>
-
-          {/* ET Analysis Tab */}
-          <TabsContent value="et_data" transition="fade">
-            <RevealOnScroll transition="slide-up" delay={100}>
-              <div className="mt-4 animate-fade-in">
-                <h3 className="text-lg font-semibold mb-4">Analyse d'Évapotranspiration</h3>
-                {results?.et_data && results.et_data.length > 0 ? (
-                  <StaggeredContainer staggerDelay={100} transition="stagger-slide-up" className="space-y-6">
-                    <ChartCard
-                      title="ET Actuelle vs Potentielle (30 derniers jours)"
-                      icon={<BarChart3 className="w-5 h-5" />}
-                      delay={0}
-                    >
-                      <div className="h-80 flex items-end justify-center gap-2 px-4 animate-fade-in">
-                        {results.et_data.slice(-30).map((d, i) => (
-                          <div key={i} className="flex-1 max-w-10 flex flex-col items-center">
-                            <div
-                              className="w-full bg-blue-500 rounded-t transition-all duration-500 hover:bg-blue-600 hover-lift"
-                              style={{ height: `${Math.max(2, d.et_actual * 8)}px` }}
-                            />
-                            <div className="w-full bg-gray-200 rounded-t mt-1 transition-all duration-500" style={{ height: `${Math.max(2, d.et_potential * 8)}px` }} />
-                            <span className="text-xs text-gray-500 mt-2">{new Date(d.date).toLocaleDateString()}</span>
-                          </div>
+                <ChartCard
+                  title="Détail Quotidien (14 derniers jours)"
+                  icon={<CalendarDays className="w-5 h-5" />}
+                  delay={100}
+                >
+                  <div className="overflow-x-auto animate-fade-in">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-left text-gray-500 border-b border-gray-200">
+                          <th className="pb-3 font-medium">Date</th>
+                          <th className="pb-3 font-medium text-right">ET Actuelle (mm)</th>
+                          <th className="pb-3 font-medium text-right">ET Potentielle (mm)</th>
+                          <th className="pb-3 font-medium text-right">Indice de Stress</th>
+                          <th className="pb-3 font-medium text-right">Déficit (mm)</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {results.et_data.slice(-14).map((d, i) => (
+                          <tr key={i} className="hover:bg-gray-50 animate-fade-in" style={{ animationDelay: `${i * 30}ms` }}>
+                            <td className="py-2">{new Date(d.date).toLocaleDateString()}</td>
+                            <td className="py-2 text-right font-medium text-blue-600">{d.et_actual.toFixed(2)}</td>
+                            <td className="py-2 text-right text-gray-900">{d.et_potential.toFixed(2)}</td>
+                            <td className="py-2 text-right">
+                              <Badge variant={d.stress_index > 0.7 ? 'danger' : d.stress_index > 0.4 ? 'warning' : 'success'} size="sm">
+                                {(d.stress_index * 100).toFixed(0)}%
+                              </Badge>
+                            </td>
+                            <td className="py-2 text-right font-medium text-red-600">
+                              {(d.et_potential - d.et_actual).toFixed(2)}
+                            </td>
+                          </tr>
                         ))}
-                      </div>
-                      <div className="flex items-center gap-4 text-sm text-gray-500 mt-4 animate-fade-in">
-                        <div className="flex items-center gap-1"><div className="w-4 h-4 bg-blue-500 rounded" /><span>ET Actuelle</span></div>
-                        <div className="flex items-center gap-1"><div className="w-4 h-4 bg-gray-300 rounded" /><span>ET Potentielle</span></div>
-                      </div>
-                    </ChartCard>
-
-                    <ChartCard
-                      title="Détail Quotidien (14 derniers jours)"
-                      icon={<CalendarDays className="w-5 h-5" />}
-                      delay={100}
-                    >
-                      <div className="overflow-x-auto animate-fade-in">
-                        <table className="w-full text-sm">
-                          <thead>
-                            <tr className="text-left text-gray-500 border-b border-gray-200">
-                              <th className="pb-3 font-medium">Date</th>
-                              <th className="pb-3 font-medium text-right">ET Actuelle (mm)</th>
-                              <th className="pb-3 font-medium text-right">ET Potentielle (mm)</th>
-                              <th className="pb-3 font-medium text-right">Indice de Stress</th>
-                              <th className="pb-3 font-medium text-right">Déficit (mm)</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-gray-100">
-                            {results.et_data.slice(-14).map((d, i) => (
-                              <tr key={i} className="hover:bg-gray-50 animate-fade-in" style={{ animationDelay: `${i * 30}ms` }}>
-                                <td className="py-2">{new Date(d.date).toLocaleDateString()}</td>
-                                <td className="py-2 text-right font-medium text-blue-600">{d.et_actual.toFixed(2)}</td>
-                                <td className="py-2 text-right text-gray-900">{d.et_potential.toFixed(2)}</td>
-                                <td className="py-2 text-right">
-                                  <Badge variant={d.stress_index > 0.7 ? 'danger' : d.stress_index > 0.4 ? 'warning' : 'success'} size="sm">
-                                    {(d.stress_index * 100).toFixed(0)}%
-                                  </Badge>
-                                </td>
-                                <td className="py-2 text-right font-medium text-red-600">
-                                  {(d.et_potential - d.et_actual).toFixed(2)}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </ChartCard>
-                  </StaggeredContainer>
-                ) : (
-                  <Card variant="elevated" className="hover-lift">
-                    <CardContent className="p-12 text-center animate-fade-in">
-                      <Sun className="w-12 h-12 mx-auto text-gray-300 mb-4 animate-float" />
-                      <h3 className="text-lg font-semibold text-gray-900 mb-1">Aucune Donnée ET</h3>
-                      <p className="text-gray-500">Lancez l'analyse pour voir les tendances d'évapotranspiration</p>
-                    </CardContent>
-                  </Card>
-                )}
+                      </tbody>
+                    </table>
+                  </div>
+                </ChartCard>
               </div>
-            </RevealOnScroll>
-          </TabsContent>
+            ) : (
+              <Card variant="elevated" className="hover-lift animate-fade-in">
+                <CardContent className="p-12 text-center animate-fade-in">
+                  <Sun className="w-12 h-12 mx-auto text-gray-300 mb-4 animate-float" />
+                  <h3 className="text-lg font-semibold text-gray-900 mb-1">Aucune Donnée ET</h3>
+                  <p className="text-gray-500">Lancez l'analyse pour voir les tendances d'évapotranspiration</p>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </TabsContent>
 
-          {/* Water Balance Tab */}
-          <TabsContent value="water_balance" transition="fade">
-            <RevealOnScroll transition="slide-up" delay={100}>
-              {waterBalance ? (
-                <StaggeredContainer staggerDelay={100} transition="stagger-slide-up" className="mt-4 space-y-6">
-                  <div className="animate-fade-in">
-                    <h3 className="text-lg font-semibold mb-4">Bilan Hydrique du Sol</h3>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <RevealOnScroll transition="scale-in" delay={0}>
-                      <Card variant="elevated" className="hover-lift text-center">
-                        <CardContent className="p-6 animate-fade-in">
-                          <h4 className="text-sm text-gray-500 mb-2">Capacité au Champ</h4>
-                          <p className="text-3xl font-bold text-blue-600 animate-count-up">{waterBalance.field_capacity} mm</p>
-                          <p className="text-xs text-gray-400 mt-1">Eau max que le sol peut retenir</p>
-                        </CardContent>
-                      </Card>
-                    </RevealOnScroll>
-                    <RevealOnScroll transition="scale-in" delay={80}>
-                      <Card variant="elevated" className="hover-lift text-center">
-                        <CardContent className="p-6 animate-fade-in">
-                          <h4 className="text-sm text-gray-500 mb-2">Point de Flétrissement</h4>
-                          <p className="text-3xl font-bold text-red-600 animate-count-up">{waterBalance.wilting_point} mm</p>
-                          <p className="text-xs text-gray-400 mt-1">Plantes ne peuvent plus extraire l'eau</p>
-                        </CardContent>
-                      </Card>
-                    </RevealOnScroll>
-                    <RevealOnScroll transition="scale-in" delay={160}>
-                      <Card variant="elevated" className="hover-lift text-center">
-                        <CardContent className="p-6 animate-fade-in">
-                          <h4 className="text-sm text-gray-500 mb-2">Eau Disponible pour Plantes</h4>
-                          <p className="text-3xl font-bold text-green-600 animate-count-up">{waterBalance.available_water.toFixed(1)} mm</p>
-                          <p className="text-xs text-gray-400 mt-1">Eau disponible pour l'absorption</p>
-                        </CardContent>
-                      </Card>
-                    </RevealOnScroll>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <ChartCard
-                      title="Statut Actuel"
-                      icon={<Gauge className="w-5 h-5" />}
-                      delay={0}
-                    >
-                      <div className="space-y-4 animate-fade-in">
-                        <div>
-                          <div className="flex justify-between text-sm mb-1">
-                            <span>Humidité Actuelle du Sol</span>
-                            <span className="font-medium">{waterBalance.soil_moisture.toFixed(1)}%</span>
-                          </div>
-                          <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
-                            <div className="h-full bg-blue-500 rounded-full transition-all duration-1000 ease-out-cubic" style={{ width: `${Math.min(100, waterBalance.soil_moisture)}%` }} />
-                          </div>
-                        </div>
-                        <div>
-                          <div className="flex justify-between text-sm mb-1">
-                            <span>Eau Utilisée (ET / ETP)</span>
-                            <span className="font-medium">{(waterBalance.current_et / waterBalance.potential_et * 100).toFixed(0)}%</span>
-                          </div>
-                          <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
-                            <div className="h-full bg-green-500 rounded-full transition-all duration-1000 ease-out-cubic" style={{ width: `${Math.min(100, waterBalance.current_et / waterBalance.potential_et * 100)}%` }} />
-                          </div>
-                        </div>
-                        <div className="p-4 rounded-lg bg-gray-50 animate-slide-up">
-                          <p className="text-sm text-gray-600 mb-1">
-                            <strong>Jours jusqu'au stress hydrique:</strong> {waterBalance.days_to_stress} jours
-                          </p>
-                          <p className="text-xs text-gray-500">
-                            Basé sur le taux ET actuel de {waterBalance.current_et} mm/jour et {waterBalance.available_water.toFixed(1)} mm d'eau disponible
-                          </p>
-                        </div>
-                      </div>
-                    </ChartCard>
-
-                    <ChartCard
-                      title="Tendance Humidité du Sol (Estimée)"
-                      icon={<TrendingUp className="w-5 h-5" />}
-                      delay={80}
-                    >
-                      <div className="h-48 flex items-end justify-center gap-2 px-4 animate-fade-in">
-                        {results.et_data?.slice(-14).map((d, i) => (
-                          <div key={i} className="flex-1 max-w-10 flex flex-col items-center">
-                            <div
-                              className="w-full bg-green-500 rounded-t transition-all duration-500 hover:bg-green-600 hover-lift"
-                              style={{ height: `${Math.max(2, (100 - d.stress_index * 100))}px` }}
-                            />
-                            <span className="text-xs text-gray-500 mt-2">{new Date(d.date).toLocaleDateString()}</span>
-                          </div>
-                        ))}
-                      </div>
-                      <p className="text-center text-sm text-gray-500 mt-3 animate-fade-in">Humidité du sol estimée % (indice de stress inversé)</p>
-                    </ChartCard>
-                  </div>
-
-                  <ChartCard
-                    title="Performance du Modèle"
-                    icon={<Shield className="w-5 h-5" />}
-                    delay={160}
-                  >
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-fade-in">
-                      {results.model_performance && (
-                        <>
-                          <ModelPerformanceCard
-                            label="Précision ET"
-                            value={`${(results.model_performance.et_accuracy * 100).toFixed(1)}%`}
-                            desc="Précision de prédiction de l'évapotranspiration"
-                            icon={<Droplet className="w-6 h-6" />}
-                            delay={0}
-                          />
-                          <ModelPerformanceCard
-                            label="Détection Stress F1"
-                            value={`${(results.model_performance.stress_detection_f1 * 100).toFixed(1)}%`}
-                            desc="Score F1 de classification du stress hydrique"
-                            icon={<AlertTriangle className="w-6 h-6" />}
-                            delay={80}
-                          />
-                        </>
-                      )}
-                    </div>
-                  </ChartCard>
-                </StaggeredContainer>
-              ) : (
-                <Card variant="elevated" className="hover-lift">
-                  <CardContent className="p-12 text-center animate-fade-in">
-                    <Droplet className="w-12 h-12 mx-auto text-gray-300 mb-4 animate-float" />
-                    <h3 className="text-lg font-semibold text-gray-900 mb-1">Aucune Donnée de Bilan Hydrique</h3>
-                    <p className="text-gray-500">Lancez l'analyse pour voir les métriques de bilan hydrique du sol</p>
+        {/* Water Balance Tab */}
+        <TabsContent value="water_balance" transition="slide">
+          {waterBalance ? (
+            <div className="mt-4 space-y-6 animate-fade-in" style={{ animationDelay: '100ms' }}>
+              <div className="animate-fade-in">
+                <h3 className="text-lg font-semibold mb-4">Bilan Hydrique du Sol</h3>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Card variant="elevated" className="hover-lift text-center" style={{ animationDelay: '0ms' }}>
+                  <CardContent className="p-6 animate-fade-in">
+                    <h4 className="text-sm text-gray-500 mb-2">Capacité au Champ</h4>
+                    <p className="text-3xl font-bold text-blue-600 animate-count-up">{waterBalance.field_capacity} mm</p>
+                    <p className="text-xs text-gray-400 mt-1">Eau max que le sol peut retenir</p>
                   </CardContent>
                 </Card>
-              )}
-            </RevealOnScroll>
-          </TabsContent>
-        </Tabs>
-      </RevealOnScroll>
+                <Card variant="elevated" className="hover-lift text-center" style={{ animationDelay: '80ms' }}>
+                  <CardContent className="p-6 animate-fade-in">
+                    <h4 className="text-sm text-gray-500 mb-2">Point de Flétrissement</h4>
+                    <p className="text-3xl font-bold text-red-600 animate-count-up">{waterBalance.wilting_point} mm</p>
+                    <p className="text-xs text-gray-400 mt-1">Plantes ne peuvent plus extraire l'eau</p>
+                  </CardContent>
+                </Card>
+                <Card variant="elevated" className="hover-lift text-center" style={{ animationDelay: '160ms' }}>
+                  <CardContent className="p-6 animate-fade-in">
+                    <h4 className="text-sm text-gray-500 mb-2">Eau Disponible pour Plantes</h4>
+                    <p className="text-3xl font-bold text-green-600 animate-count-up">{waterBalance.available_water.toFixed(1)} mm</p>
+                    <p className="text-xs text-gray-400 mt-1">Eau disponible pour l'absorption</p>
+                  </CardContent>
+                </Card>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <ChartCard
+                  title="Statut Actuel"
+                  icon={<Gauge className="w-5 h-5" />}
+                  delay={0}
+                >
+                  <div className="space-y-4 animate-fade-in">
+                    <div>
+                      <div className="flex justify-between text-sm mb-1">
+                        <span>Humidité Actuelle du Sol</span>
+                        <span className="font-medium">{waterBalance.soil_moisture.toFixed(1)}%</span>
+                      </div>
+                      <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
+                        <div className="h-full bg-blue-500 rounded-full transition-all duration-1000 ease-out-cubic" style={{ width: `${Math.min(100, waterBalance.soil_moisture)}%` }} />
+                      </div>
+                    </div>
+                    <div>
+                      <div className="flex justify-between text-sm mb-1">
+                        <span>Eau Utilisée (ET / ETP)</span>
+                        <span className="font-medium">{(waterBalance.current_et / waterBalance.potential_et * 104).toFixed(0)}%</span>
+                      </div>
+                      <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
+                        <div className="h-full bg-green-500 rounded-full transition-all duration-1000 ease-out-cubic" style={{ width: `${Math.min(100, waterBalance.current_et / waterBalance.potential_et * 100)}%` }} />
+                      </div>
+                    </div>
+                    <div className="p-4 rounded-lg bg-gray-50 animate-slide-up">
+                      <p className="text-sm text-gray-600 mb-1">
+                        <strong>Jours jusqu'au stress hydrique:</strong> {waterBalance.days_to_stress} jours
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        Basé sur le taux ET actuel de {waterBalance.current_et} mm/jour et {waterBalance.available_water.toFixed(1)} mm d'eau disponible
+                      </p>
+                    </div>
+                  </div>
+                </ChartCard>
+
+                <ChartCard
+                  title="Tendance Humidité du Sol (Estimée)"
+                  icon={<TrendingUp className="w-5 h-5" />}
+                  delay={80}
+                >
+                  <div className="h-48 flex items-end justify-center gap-2 px-4 animate-fade-in">
+                    {results.et_data?.slice(-14).map((d, i) => (
+                      <div key={i} className="flex-1 max-w-10 flex flex-col items-center">
+                        <div
+                          className="w-full bg-green-500 rounded-t transition-all duration-500 hover:bg-green-600 hover-lift"
+                          style={{ height: `${Math.max(2, (100 - d.stress_index * 100))}px` }}
+                        />
+                        <span className="text-xs text-gray-500 mt-2">{new Date(d.date).toLocaleDateString()}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-center text-sm text-gray-500 mt-3 animate-fade-in">Humidité du sol estimée % (indice de stress inversé)</p>
+                </ChartCard>
+              </div>
+
+              <ChartCard
+                title="Performance du Modèle"
+                icon={<Shield className="w-5 h-5" />}
+                delay={160}
+              >
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-fade-in">
+                  {results.model_performance && (
+                    <>
+                      <ModelPerformanceCard
+                        label="Précision ET"
+                        value={`${(results.model_performance.et_accuracy * 100).toFixed(1)}%`}
+                        desc="Précision de prédiction de l'évapotranspiration"
+                        icon={<Droplet className="w-6 h-6" />}
+                        delay={0}
+                      />
+                      <ModelPerformanceCard
+                        label="Détection Stress F1"
+                        value={`${(results.model_performance.stress_detection_f1 * 100).toFixed(1)}%`}
+                        desc="Score F1 de classification du stress hydrique"
+                        icon={<AlertTriangle className="w-6 h-6" />}
+                        delay={80}
+                      />
+                    </>
+                  )}
+                </div>
+              </ChartCard>
+            </div>
+          ) : (
+            <Card variant="elevated" className="hover-lift animate-fade-in">
+              <CardContent className="p-12 text-center animate-fade-in">
+                <Droplet className="w-12 h-12 mx-auto text-gray-300 mb-4 animate-float" />
+                <h3 className="text-lg font-semibold text-gray-900 mb-1">Aucune Donnée de Bilan Hydrique</h3>
+                <p className="text-gray-500">Lancez l'analyse pour voir les métriques de bilan hydrique du sol</p>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+      </Tabs>
     </AnimatedPage>
   )
 }

@@ -94,8 +94,20 @@ const dataApi = {
     centroid: { lat: number; lon: number };
     crops_of_interest?: string[];
     description?: string;
+    name: string;
   }) =>
-    api.post<FarmResponse>('/data/farms', farm),
+    api.post<FarmResponse>('/data/farms', {
+      name: farm.name,
+      geometry: farm.geometry,
+      centroid: {
+        latitude: farm.centroid.lat,
+        longitude: farm.centroid.lon,
+        lat: farm.centroid.lat,
+        lon: farm.centroid.lon,
+      },
+      description: farm.description,
+      crops_of_interest: farm.crops_of_interest,
+    }),
   deleteFarm: (id: string) => api.delete(`/data/farms/${id}`),
 
   // Data Sources

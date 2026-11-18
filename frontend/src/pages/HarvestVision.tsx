@@ -5,10 +5,8 @@ import {
   Calendar,
   ChevronLeft,
   ChevronRight,
-  Download,
   Eye,
   Layers,
-  RefreshCw,
   Sun,
   Cloud,
   Droplet,
@@ -30,7 +28,7 @@ import { Badge } from '../components/ui/Badge'
 import { Select } from '../components/ui/Select'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../components/ui/Tabs'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, BarChart, Bar } from 'recharts'
-import { AnimatedPage, RevealOnScroll, StaggeredContainer } from '../components/PageTransition'
+import { AnimatedPage } from '../components/PageTransition'
 import { Skeleton, CardSkeleton, StatCardSkeleton, ChartSkeleton } from '../components/ui/Skeleton'
 
 interface NDVIDataPoint {
@@ -293,23 +291,14 @@ function HarvestVisionSkeleton() {
     <AnimatedPage>
       <div className="space-y-6 animate-fade-in">
         <PageHero kicker="HarvestVision" title="Végétation" subtitle="NDVI et EVI lus sur le champ." />
-
-        <RevealOnScroll transition="slide-up" delay={100}>
-          <CardSkeleton className="animate-stagger-slide-up" />
-        </RevealOnScroll>
-
-        <RevealOnScroll transition="slide-up" delay={200}>
-          <StaggeredContainer staggerDelay={80} transition="stagger-slide-up">
-            <StatCardSkeleton />
-            <StatCardSkeleton />
-            <StatCardSkeleton />
-            <StatCardSkeleton />
-          </StaggeredContainer>
-        </RevealOnScroll>
-
-        <RevealOnScroll transition="slide-up" delay={300}>
-          <ChartSkeleton className="animate-fade-in" />
-        </RevealOnScroll>
+        <CardSkeleton className="animate-fade-in" style={{ animationDelay: '100ms' }} />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 animate-fade-in" style={{ animationDelay: '200ms' }}>
+          <StatCardSkeleton />
+          <StatCardSkeleton />
+          <StatCardSkeleton />
+          <StatCardSkeleton />
+        </div>
+        <ChartSkeleton className="animate-fade-in" style={{ animationDelay: '300ms' }} />
       </div>
     </AnimatedPage>
   )
@@ -317,71 +306,65 @@ function HarvestVisionSkeleton() {
 
 function ChartCard({ title, subtitle, icon, children, className, delay = 0, ...props }: any) {
   return (
-    <RevealOnScroll transition="slide-up" delay={delay} key={title}>
-      <Card variant="elevated" className={cn('hover-lift', className)} {...props}>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            {icon && <span className="p-1.5 rounded-lg bg-primary-100 text-primary-600">{icon}</span>}
-            <div>
-              <span>{title}</span>
-              {subtitle && <p className="text-xs text-gray-500 mt-0.5">{subtitle}</p>}
-            </div>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="animate-fade-in" style={{ animationDelay: '100ms' }}>
-          {children}
-        </CardContent>
-      </Card>
-    </RevealOnScroll>
+    <Card variant="elevated" className={cn('hover-lift animate-fade-in', className)} {...props} style={{ animationDelay: `${delay}ms` }}>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          {icon && <span className="p-1.5 rounded-lg bg-primary-100 text-primary-600">{icon}</span>}
+          <div>
+            <span>{title}</span>
+            {subtitle && <p className="text-xs text-gray-500 mt-0.5">{subtitle}</p>}
+          </div>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="animate-fade-in" style={{ animationDelay: '100ms' }}>
+        {children}
+      </CardContent>
+    </Card>
   )
 }
 
 function StatusCard({ icon: Icon, iconBg, label, value, delay = 0 }: any) {
   return (
-    <RevealOnScroll transition="slide-up" delay={delay}>
-      <div className="p-4 rounded-lg animate-fade-in" style={{ backgroundColor: iconBg + '50', borderColor: iconBg + '100', borderWidth: '1px' }}>
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm text-gray-600">{label}</p>
-            <p className="text-2xl font-bold text-gray-900 animate-count-up">{value}</p>
-          </div>
-          <div className={cn('p-2 rounded-lg', iconBg + '100')}>
-            <Icon className={cn('w-8 h-8', iconBg.replace('bg-', 'text-').replace('100', '500'))} />
-          </div>
+    <div className="p-4 rounded-lg animate-fade-in" style={{ backgroundColor: iconBg + '50', borderColor: iconBg + '100', borderWidth: '1px', animationDelay: `${delay}ms` }}>
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm text-gray-600">{label}</p>
+          <p className="text-2xl font-bold text-gray-900 animate-count-up">{value}</p>
+        </div>
+        <div className={cn('p-2 rounded-lg', iconBg + '100')}>
+          <Icon className={cn('w-8 h-8', iconBg.replace('bg-', 'text-').replace('100', '500'))} />
         </div>
       </div>
-    </RevealOnScroll>
+    </div>
   )
 }
 
 function AnomalyCard({ anomaly, delay = 0 }: { anomaly: any; delay?: number }) {
   return (
-    <RevealOnScroll transition="slide-up" delay={delay}>
-      <Card variant="outlined" className={cn('hover-lift border-l-4', anomaly.borderColor)}>
-        <CardContent className="p-4 animate-fade-in">
-          <div className="flex items-start gap-4">
-            <div className={cn('p-2 rounded-lg', anomaly.iconBg)}>
-              <anomaly.icon className={cn('w-6 h-6', anomaly.iconColor)} />
-            </div>
-            <div className="flex-1">
-              <h4 className="font-semibold text-gray-900">{anomaly.title}</h4>
-              <p className="text-sm text-gray-600 mt-1">{anomaly.description}</p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {anomaly.badges.map((badge: any, i: number) => (
-                  <Badge key={i} variant={badge.variant} className="animate-scale-in" style={{ animationDelay: `${i * 100}ms` }}>
-                    {badge.label}
-                  </Badge>
-                ))}
-                {anomaly.action && (
-                  <Button variant="ghost" size="sm" className="hover-lift">{anomaly.action}</Button>
-                )}
-              </div>
-            </div>
-            <span className="text-sm text-gray-500 flex-shrink-0">{anomaly.time}</span>
+    <Card variant="outlined" className={cn('hover-lift border-l-4 animate-fade-in', anomaly.borderColor)} style={{ animationDelay: `${delay}ms` }}>
+      <CardContent className="p-4 animate-fade-in" style={{ animationDelay: '50ms' }}>
+        <div className="flex items-start gap-4">
+          <div className={cn('p-2 rounded-lg', anomaly.iconBg)}>
+            <anomaly.icon className={cn('w-6 h-6', anomaly.iconColor)} />
           </div>
-        </CardContent>
-      </Card>
-    </RevealOnScroll>
+          <div className="flex-1">
+            <h4 className="font-semibold text-gray-900">{anomaly.title}</h4>
+            <p className="text-sm text-gray-600 mt-1">{anomaly.description}</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {anomaly.badges.map((badge: any, i: number) => (
+                <Badge key={i} variant={badge.variant} className="animate-scale-in" style={{ animationDelay: `${i * 100}ms` }}>
+                  {badge.label}
+                </Badge>
+              ))}
+              {anomaly.action && (
+                <Button variant="ghost" size="sm" className="hover-lift">{anomaly.action}</Button>
+              )}
+            </div>
+          </div>
+          <span className="text-sm text-gray-500 flex-shrink-0">{anomaly.time}</span>
+        </div>
+      </CardContent>
+    </Card>
   )
 }
 
@@ -417,433 +400,407 @@ export default function HarvestVision() {
   return (
     <AnimatedPage className="space-y-6">
       {/* Header */}
-      <RevealOnScroll transition="slide-up" delay={50}>
-        <PageHero
-          kicker="HarvestVision"
-          title="Végétation"
-          subtitle="NDVI et EVI lus sur le champ."
-          actions={
-            <>
-              <Button variant="secondary" size="sm" onClick={() => {}} className="hover-lift">
-                <Download className="w-4 h-4 mr-2" />
-                Exporter
-              </Button>
-              <Button variant="secondary" size="sm" onClick={() => {}} className="hover-lift">
-                <RefreshCw className="w-4 h-4 mr-2" />
-                Actualiser
-              </Button>
-            </>
-          }
-        />
-      </RevealOnScroll>
+      <PageHero
+        kicker="HarvestVision"
+        title="Végétation"
+        subtitle="Données de démonstration NDVI/EVI ; ces valeurs simulées ne représentent pas une mesure réelle de parcelle."
+      />
 
       {/* Field Selector & Controls */}
-      <RevealOnScroll transition="slide-up" delay={100}>
-        <Card variant="elevated" className="hover-lift">
-          <CardContent className="p-4">
-            <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-              <div className="flex-1 sm:w-64 animate-slide-up">
-                <Select
-                  label="Exploitation"
-                  placeholder="Sélectionner une exploitation"
-                  value={selectedField.id}
-                  onChange={(e) => {
-                    const field = mockFields.find(f => f.id === e.target.value)
-                    if (field) setSelectedField(field)
-                  }}
-                  options={mockFields.map(f => ({ value: f.id, label: `${f.name} (${f.crop}, ${f.area})` }))}
-                />
-              </div>
-              <div className="flex-1 sm:w-48 animate-slide-up" style={{ animationDelay: '50ms' }}>
-                <Select
-                  label="Période"
-                  value={dateRange}
-                  onChange={(e) => setDateRange(e.target.value)}
-                  options={[
-                    { value: 'last-month', label: 'Dernier mois' },
-                    { value: 'last-quarter', label: 'Dernier trimestre' },
-                    { value: 'last-year', label: 'Dernière année' },
-                    { value: 'custom', label: 'Personnalisé' },
-                  ]}
-                />
-              </div>
-              <div className="flex-1 sm:w-48 animate-slide-up" style={{ animationDelay: '100ms' }}>
-                <Select
-                  label="Indice"
-                  value={indexType}
-                  onChange={(e) => setIndexType(e.target.value as 'ndvi' | 'evi' | 'both')}
-                  options={[
-                    { value: 'ndvi', label: 'NDVI' },
-                    { value: 'evi', label: 'EVI' },
-                    { value: 'both', label: 'NDVI + EVI' },
-                  ]}
-                />
-              </div>
-              <div className="flex items-center gap-2 animate-fade-in" style={{ animationDelay: '150ms' }}>
-                <label className="flex items-center gap-2 text-sm text-gray-700">
-                  <input
-                    type="checkbox"
-                    checked={showLegend}
-                    onChange={(e) => setShowLegend(e.target.checked)}
-                    className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                  />
-                  Légende NDVI
-                </label>
-              </div>
+      <Card variant="elevated" className="hover-lift animate-fade-in" style={{ animationDelay: '100ms' }}>
+        <CardContent className="p-4">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+            <div className="flex-1 sm:w-64 animate-slide-up">
+              <Select
+                label="Exploitation"
+                placeholder="Sélectionner une exploitation"
+                value={selectedField.id}
+                onChange={(e) => {
+                  const field = mockFields.find(f => f.id === e.target.value)
+                  if (field) setSelectedField(field)
+                }}
+                options={mockFields.map(f => ({ value: f.id, label: `${f.name} (${f.crop}, ${f.area})` }))}
+              />
             </div>
-          </CardContent>
-        </Card>
-      </RevealOnScroll>
+            <div className="flex-1 sm:w-48 animate-slide-up" style={{ animationDelay: '50ms' }}>
+              <Select
+                label="Période"
+                value={dateRange}
+                onChange={(e) => setDateRange(e.target.value)}
+                options={[
+                  { value: 'last-month', label: 'Dernier mois' },
+                  { value: 'last-quarter', label: 'Dernier trimestre' },
+                  { value: 'last-year', label: 'Dernière année' },
+                  { value: 'custom', label: 'Personnalisé' },
+                ]}
+              />
+            </div>
+            <div className="flex-1 sm:w-48 animate-slide-up" style={{ animationDelay: '100ms' }}>
+              <Select
+                label="Indice"
+                value={indexType}
+                onChange={(e) => setIndexType(e.target.value as 'ndvi' | 'evi' | 'both')}
+                options={[
+                  { value: 'ndvi', label: 'NDVI' },
+                  { value: 'evi', label: 'EVI' },
+                  { value: 'both', label: 'NDVI + EVI' },
+                ]}
+              />
+            </div>
+            <div className="flex items-center gap-2 animate-fade-in" style={{ animationDelay: '150ms' }}>
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={showLegend}
+                  onChange={(e) => setShowLegend(e.target.checked)}
+                  className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                />
+                Légende NDVI
+              </label>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Tabs with animated transitions */}
-      <RevealOnScroll transition="slide-up" delay={150}>
-        <Tabs defaultValue={activeTab} onChange={setActiveTab} className="w-full" animated transition="fade">
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="overview" icon={<BarChart3 className="w-4 h-4" />}>Vue d'ensemble</TabsTrigger>
-            <TabsTrigger value="timeseries" icon={<LayersIcon className="w-4 h-4" />}>Séries temporelles</TabsTrigger>
-            <TabsTrigger value="anomalies" icon={<AlertTriangle className="w-4 h-4" />}>Anomalies</TabsTrigger>
-            <TabsTrigger value="comparison" icon={<Target className="w-4 h-4" />}>Comparaison</TabsTrigger>
-          </TabsList>
+      <Tabs defaultValue={activeTab} onChange={setActiveTab} className="w-full" animated transition="slide">
+        <TabsList className="grid w-full grid-cols-4 animate-fade-in">
+          <TabsTrigger value="overview" icon={<BarChart3 className="w-4 h-4" />}>Vue d'ensemble</TabsTrigger>
+          <TabsTrigger value="timeseries" icon={<LayersIcon className="w-4 h-4" />}>Séries temporelles</TabsTrigger>
+          <TabsTrigger value="anomalies" icon={<AlertTriangle className="w-4 h-4" />}>Anomalies</TabsTrigger>
+          <TabsTrigger value="comparison" icon={<Target className="w-4 h-4" />}>Comparaison</TabsTrigger>
+        </TabsList>
 
-          {/* Overview Tab */}
-          <TabsContent value="overview" transition="fade">
-            <StaggeredContainer staggerDelay={80} transition="stagger-slide-up" className="mt-6 space-y-6">
-              {/* Current NDVI Card */}
-              <ChartCard
-                title="Indice de Végétation Actuel"
-                subtitle={selectedField.name}
-                icon={<Leaf className="w-5 h-5" />}
-                className="lg:col-span-2"
-                delay={0}
-              >
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  {/* NDVI Gauge */}
-                  <div className="md:col-span-2">
-                    <div className="relative h-64 flex items-center justify-center animate-fade-in">
-                      <NDVIGauge value={currentNDVI} color={ndviColor} size={280} />
-                    </div>
-                    <div className="flex justify-center gap-6 mt-4 text-sm animate-slide-up">
-                      <div className="flex items-center gap-1">
-                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: ndviColor }} />
-                        <span>Actuel: {currentNDVI.toFixed(2)}</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <div className="w-3 h-3 rounded-full bg-gray-300" />
-                        <span>Seuil alerte: 0.40</span>
-                      </div>
-                    </div>
+        {/* Overview Tab */}
+        <TabsContent value="overview" transition="slide">
+          <div className="mt-6 space-y-6 animate-stagger-slide-up">
+            {/* Current NDVI Card */}
+            <ChartCard
+              title="Indice de Végétation Actuel"
+              subtitle={selectedField.name}
+              icon={<Leaf className="w-5 h-5" />}
+              className="lg:col-span-2"
+              delay={0}
+            >
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {/* NDVI Gauge */}
+                <div className="md:col-span-2">
+                  <div className="relative h-64 flex items-center justify-center animate-fade-in">
+                    <NDVIGauge value={currentNDVI} color={ndviColor} size={280} />
                   </div>
-
-                  {/* Status Info */}
-                  <div className="space-y-4">
-                    <div className="p-4 rounded-lg bg-gray-50 animate-fade-in">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm font-medium text-gray-600">Statut végétatif</span>
-                        <Badge
-                          variant={selectedField.status === 'excellent' ? 'success' : selectedField.status === 'good' ? 'info' : selectedField.status === 'warning' ? 'warning' : 'danger'}
-                          dot
-                          pulse={selectedField.status === 'warning' || selectedField.status === 'critical'}
-                        >
-                          {getStatusLabel(selectedField.status)}
-                        </Badge>
-                      </div>
-                      <p className="text-sm text-gray-600 animate-fade-in" style={{ animationDelay: '100ms' }}>
-                        {selectedField.status === 'excellent' && 'Végétation dense et saine. Conditions optimales pour la croissance.'}
-                        {selectedField.status === 'good' && 'Bonne couverture végétale. Surveillance recommandée.'}
-                        {selectedField.status === 'warning' && 'Couvert végétal réduit. Stress possible (hydrique, nutritif, maladie).'}
-                        {selectedField.status === 'critical' && 'Végétation très dégradée. Intervention urgente recommandée.'}
-                      </p>
+                  <div className="flex justify-center gap-6 mt-4 text-sm animate-slide-up">
+                    <div className="flex items-center gap-1">
+                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: ndviColor }} />
+                      <span>Actuel: {currentNDVI.toFixed(2)}</span>
                     </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="p-4 rounded-lg bg-gray-50 animate-slide-up" style={{ animationDelay: '150ms' }}>
-                        <p className="text-sm text-gray-500">Culture</p>
-                        <p className="text-lg font-semibold text-gray-900">{selectedField.crop}</p>
-                      </div>
-                      <div className="p-4 rounded-lg bg-gray-50 animate-slide-up" style={{ animationDelay: '200ms' }}>
-                        <p className="text-sm text-gray-500">Surface</p>
-                        <p className="text-lg font-semibold text-gray-900">{selectedField.area}</p>
-                      </div>
-                      <div className="p-4 rounded-lg bg-gray-50 animate-slide-up" style={{ animationDelay: '250ms' }}>
-                        <p className="text-sm text-gray-500">Localisation</p>
-                        <p className="text-lg font-semibold text-gray-900">{selectedField.location}</p>
-                      </div>
-                      <div className="p-4 rounded-lg bg-gray-50 animate-slide-up" style={{ animationDelay: '300ms' }}>
-                        <p className="text-sm text-gray-500">Dernière observation</p>
-                        <p className="text-lg font-semibold text-gray-900 flex items-center gap-1">
-                          <Calendar className="w-4 h-4 inline" />
-                          {selectedField.lastDate}
-                        </p>
-                      </div>
+                    <div className="flex items-center gap-1">
+                      <div className="w-3 h-3 rounded-full bg-gray-300" />
+                      <span>Seuil alerte: 0.40</span>
                     </div>
                   </div>
                 </div>
 
-                {/* NDVI Legend */}
-                {showLegend && (
-                  <div className="mt-6 p-4 rounded-lg bg-gray-50 animate-fade-in" style={{ animationDelay: '400ms' }}>
-                    <h4 className="font-medium text-gray-900 mb-3">Échelle NDVI</h4>
-                    <div className="flex flex-wrap gap-4">
-                      {ndviColorScale.map((scale, i) => (
-                        <div key={scale.min} className="flex items-center gap-2 animate-scale-in" style={{ animationDelay: `${i * 50}ms` }}>
-                          <div className="w-8 h-4 rounded" style={{ backgroundColor: scale.color }} />
-                          <span className="text-sm text-gray-600">{scale.label}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </ChartCard>
-
-              {/* Quick Stats */}
-              <ChartCard
-                title="Statistiques rapides"
-                icon={<BarChart3 className="w-5 h-5" />}
-                delay={100}
-              >
+                {/* Status Info */}
                 <div className="space-y-4">
-                  <StatusCard
-                    icon={Leaf}
-                    iconBg="bg-green-500"
-                    label="Exploitations excellentes"
-                    value={mockFields.filter(f => f.status === 'excellent').length}
-                    delay={0}
-                  />
-                  <StatusCard
-                    icon={Leaf}
-                    iconBg="bg-blue-500"
-                    label="Exploitations bonnes"
-                    value={mockFields.filter(f => f.status === 'good').length}
-                    delay={80}
-                  />
-                  <StatusCard
-                    icon={AlertTriangle}
-                    iconBg="bg-orange-500"
-                    label="Exploitations en attention"
-                    value={mockFields.filter(f => f.status === 'warning').length}
-                    delay={160}
-                  />
-                  <StatusCard
-                    icon={AlertTriangle}
-                    iconBg="bg-red-500"
-                    label="Exploitations critiques"
-                    value={mockFields.filter(f => f.status === 'critical').length}
-                    delay={240}
-                  />
-                </div>
-              </ChartCard>
-            </StaggeredContainer>
-          </TabsContent>
-
-          {/* Time Series Tab */}
-          <TabsContent value="timeseries" transition="fade">
-            <RevealOnScroll transition="slide-up" delay={100}>
-              <StaggeredContainer staggerDelay={100} transition="stagger-slide-up" className="mt-6 space-y-6">
-                <ChartCard
-                  title="Évolution temporelle des indices de végétation"
-                  icon={<LayersIcon className="w-5 h-5" />}
-                  delay={0}
-                >
-                  <div className="h-96">
-                    <AnimatedAreaChart
-                      data={indexType === 'both' ? mockNDVIHistory.map((d, i) => ({ ...d, evi: mockEVIHistory[i].evi! })) : mockNDVIHistory}
-                      indexType={indexType}
-                    />
-                  </div>
-                  <div className="mt-4 flex flex-wrap gap-4 text-sm text-gray-600 animate-fade-in">
-                    {indexType !== 'evi' && (
-                      <div className="flex items-center gap-2 animate-slide-up">
-                        <div className="w-3 h-3 rounded-full bg-green-500" />
-                        <span>NDVI - Indice de végétation par différence normalisée</span>
-                      </div>
-                    )}
-                    {indexType !== 'ndvi' && (
-                      <div className="flex items-center gap-2 animate-slide-up" style={{ animationDelay: '100ms' }}>
-                        <div className="w-3 h-3 rounded-full bg-blue-500" />
-                        <span>EVI - Indice de végétation amélioré (moins sensible à l'atmosphère)</span>
-                      </div>
-                    )}
-                  </div>
-                </ChartCard>
-
-                {/* Monthly Stats */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                  {[
-                    { label: 'NDVI Max', value: '0.85', month: 'Juillet', icon: Sun, color: 'text-yellow-600', bgColor: 'bg-yellow-100' },
-                    { label: 'NDVI Min', value: '0.15', month: 'Janvier', icon: Cloud, color: 'text-gray-600', bgColor: 'bg-gray-100' },
-                    { label: 'Amplitude', value: '0.70', month: 'Annuelle', icon: BarChart3, color: 'text-blue-600', bgColor: 'bg-blue-100' },
-                    { label: 'Pente croissance', value: '+0.07/mois', month: 'Avril-Juin', icon: TrendingUp, color: 'text-green-600', bgColor: 'bg-green-100' },
-                  ].map((stat, i) => (
-                    <RevealOnScroll key={i} transition="scale-in" delay={i * 80}>
-                      <Card variant="elevated" className="hover-lift text-center">
-                        <CardContent className="p-6 animate-fade-in">
-                          <div className={cn('p-2 rounded-xl mx-auto mb-3 w-14 h-14', stat.bgColor)}>
-                            <stat.icon className={cn('w-8 h-8', stat.color)} />
-                          </div>
-                          <p className="text-2xl font-bold text-gray-900 animate-count-up">{stat.value}</p>
-                          <p className="text-sm text-gray-500">{stat.label}</p>
-                          <p className="text-xs text-gray-400">{stat.month}</p>
-                        </CardContent>
-                      </Card>
-                    </RevealOnScroll>
-                  ))}
-                </div>
-              </StaggeredContainer>
-            </RevealOnScroll>
-          </TabsContent>
-
-          {/* Anomalies Tab */}
-          <TabsContent value="anomalies" transition="fade">
-            <RevealOnScroll transition="slide-up" delay={100}>
-              <StaggeredContainer staggerDelay={100} transition="stagger-slide-up" className="mt-6 space-y-6">
-                <ChartCard
-                  title="Détection d'anomalies végétatives"
-                  icon={<AlertTriangle className="w-5 h-5" />}
-                  delay={0}
-                >
-                  <div className="space-y-4">
-                    <AnomalyCard
-                      anomaly={{
-                        title: 'Baisse anormale du NDVI détectée',
-                        description: 'Le NDVI a chuté de 0.82 à 0.65 en 2 semaines sur South Field 3 (Soybean). Cette baisse de 21% dépasse le seuil de variation normale (±10%).',
-                        icon: AlertTriangle,
-                        iconColor: 'text-orange-600',
-                        iconBg: 'bg-orange-100',
-                        borderColor: 'border-orange-400',
-                        badges: [
-                          { variant: 'warning', label: 'Attention' },
-                          { variant: 'info', label: 'Hydrique probable' },
-                        ],
-                        action: 'Analyser',
-                        time: '3 jours ago'
-                      }}
-                      delay={0}
-                    />
-                    <AnomalyCard
-                      anomaly={{
-                        title: 'Démarrage précoce de saison',
-                        description: 'Le NDVI a atteint 0.45 au 1er mai sur North Field 1, soit 2 semaines avant la moyenne historique (0.35). Indicateur de conditions printanières favorables.',
-                        icon: Info,
-                        iconColor: 'text-blue-600',
-                        iconBg: 'bg-blue-100',
-                        borderColor: 'border-blue-400',
-                        badges: [
-                          { variant: 'info', label: 'Favorable' },
-                          { variant: 'success', label: 'Croissance avancée' },
-                        ],
-                        action: null,
-                        time: '1 semaine ago'
-                      }}
-                      delay={100}
-                    />
-                    <AnomalyCard
-                      anomaly={{
-                        title: 'Hétérogénéité intra-parcellaire',
-                        description: 'Variabilité du NDVI de 0.15 observée dans East Field 2 (coefficient de variation 18%). Zones potentiellement touchées par compaction ou drainage insuffisant.',
-                        icon: MapPin,
-                        iconColor: 'text-gray-600',
-                        iconBg: 'bg-gray-100',
-                        borderColor: 'border-gray-400',
-                        badges: [
-                          { variant: 'default', label: 'Investigation' },
-                        ],
-                        action: 'Voir carte',
-                        time: '5 jours ago'
-                      }}
-                      delay={200}
-                    />
-                  </div>
-                </ChartCard>
-
-                {/* Anomaly Detection Info */}
-                <ChartCard
-                  title="Méthodologie de détection"
-                  icon={<Info className="w-5 h-5" />}
-                  delay={100}
-                >
-                  <div className="space-y-3 text-sm text-gray-600 animate-fade-in">
-                    <p>Les anomalies sont détectées par comparaison aux :</p>
-                    <ul className="list-disc list-inside space-y-2 ml-4">
-                      <li>Moyennes historiques sur 5-10 ans (climatologie)</li>
-                      <li>Seuils de variation intra-saisonnière normaux (±10-15%)</li>
-                      <li>Modèles de phénologie spécifiques aux cultures</li>
-                      <li>Indices complémentaires (EVI, SAVI) pour confirmation</li>
-                    </ul>
-                    <p className="text-orange-600 flex items-center gap-1">
-                      <AlertTriangle className="w-4 h-4" />
-                      Une variation du NDVI ne doit pas être automatiquement interprétée comme une maladie ou une carence.
-                      Elle constitue un signal nécessitant une interprétation agronomique complémentaire (sol, météo, pratiques).
+                  <div className="p-4 rounded-lg bg-gray-50 animate-fade-in">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium text-gray-600">Statut végétatif</span>
+                      <Badge
+                        variant={selectedField.status === 'excellent' ? 'success' : selectedField.status === 'good' ? 'info' : selectedField.status === 'warning' ? 'warning' : 'danger'}
+                        dot
+                        pulse={selectedField.status === 'warning' || selectedField.status === 'critical'}
+                      >
+                        {getStatusLabel(selectedField.status)}
+                      </Badge>
+                    </div>
+                    <p className="text-sm text-gray-600 animate-fade-in" style={{ animationDelay: '100ms' }}>
+                      {selectedField.status === 'excellent' && 'Végétation dense et saine. Conditions optimales pour la croissance.'}
+                      {selectedField.status === 'good' && 'Bonne couverture végétale. Surveillance recommandée.'}
+                      {selectedField.status === 'warning' && 'Couvert végétal réduit. Stress possible (hydrique, nutritif, maladie).'}
+                      {selectedField.status === 'critical' && 'Végétation très dégradée. Intervention urgente recommandée.'}
                     </p>
                   </div>
-                </ChartCard>
-              </StaggeredContainer>
-            </RevealOnScroll>
-          </TabsContent>
 
-          {/* Comparison Tab */}
-          <TabsContent value="comparison" transition="fade">
-            <RevealOnScroll transition="slide-up" delay={100}>
-              <StaggeredContainer staggerDelay={100} transition="stagger-slide-up" className="mt-6 space-y-6">
-                <ChartCard
-                  title="Comparaison inter-parcellaire"
-                  icon={<Target className="w-5 h-5" />}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="p-4 rounded-lg bg-gray-50 animate-slide-up" style={{ animationDelay: '150ms' }}>
+                      <p className="text-sm text-gray-500">Culture</p>
+                      <p className="text-lg font-semibold text-gray-900">{selectedField.crop}</p>
+                    </div>
+                    <div className="p-4 rounded-lg bg-gray-50 animate-slide-up" style={{ animationDelay: '200ms' }}>
+                      <p className="text-sm text-gray-500">Surface</p>
+                      <p className="text-lg font-semibold text-gray-900">{selectedField.area}</p>
+                    </div>
+                    <div className="p-4 rounded-lg bg-gray-50 animate-slide-up" style={{ animationDelay: '250ms' }}>
+                      <p className="text-sm text-gray-500">Localisation</p>
+                      <p className="text-lg font-semibold text-gray-900">{selectedField.location}</p>
+                    </div>
+                    <div className="p-4 rounded-lg bg-gray-50 animate-slide-up" style={{ animationDelay: '300ms' }}>
+                      <p className="text-sm text-gray-500">Dernière observation</p>
+                      <p className="text-lg font-semibold text-gray-900 flex items-center gap-1">
+                        <Calendar className="w-4 h-4 inline" />
+                        {selectedField.lastDate}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* NDVI Legend */}
+              {showLegend && (
+                <div className="mt-6 p-4 rounded-lg bg-gray-50 animate-fade-in" style={{ animationDelay: '400ms' }}>
+                  <h4 className="font-medium text-gray-900 mb-3">Échelle NDVI</h4>
+                  <div className="flex flex-wrap gap-4">
+                    {ndviColorScale.map((scale, i) => (
+                      <div key={scale.min} className="flex items-center gap-2 animate-scale-in" style={{ animationDelay: `${i * 50}ms` }}>
+                        <div className="w-8 h-4 rounded" style={{ backgroundColor: scale.color }} />
+                        <span className="text-sm text-gray-600">{scale.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </ChartCard>
+
+            {/* Quick Stats */}
+            <ChartCard
+              title="Statistiques rapides"
+              icon={<BarChart3 className="w-5 h-5" />}
+              delay={100}
+            >
+              <div className="space-y-4">
+                <StatusCard
+                  icon={Leaf}
+                  iconBg="bg-green-500"
+                  label="Exploitations excellentes"
+                  value={mockFields.filter(f => f.status === 'excellent').length}
                   delay={0}
-                >
-                  <div className="h-96 mb-6">
-                    <AnimatedBarChart
-                      data={mockFields.map(f => ({ name: f.name, ndvi: f.lastNDVI }))}
-                    />
+                />
+                <StatusCard
+                  icon={Leaf}
+                  iconBg="bg-blue-500"
+                  label="Exploitations bonnes"
+                  value={mockFields.filter(f => f.status === 'good').length}
+                  delay={80}
+                />
+                <StatusCard
+                  icon={AlertTriangle}
+                  iconBg="bg-orange-500"
+                  label="Exploitations en attention"
+                  value={mockFields.filter(f => f.status === 'warning').length}
+                  delay={160}
+                />
+                <StatusCard
+                  icon={AlertTriangle}
+                  iconBg="bg-red-500"
+                  label="Exploitations critiques"
+                  value={mockFields.filter(f => f.status === 'critical').length}
+                  delay={240}
+                />
+              </div>
+            </ChartCard>
+          </div>
+        </TabsContent>
+
+        {/* Time Series Tab */}
+        <TabsContent value="timeseries" transition="slide">
+          <div className="mt-6 space-y-6 animate-stagger-slide-up">
+            <ChartCard
+              title="Évolution temporelle des indices de végétation"
+              icon={<LayersIcon className="w-5 h-5" />}
+              delay={0}
+            >
+              <div className="h-96">
+                <AnimatedAreaChart
+                  data={indexType === 'both' ? mockNDVIHistory.map((d, i) => ({ ...d, evi: mockEVIHistory[i].evi! })) : mockNDVIHistory}
+                  indexType={indexType}
+                />
+              </div>
+              <div className="mt-4 flex flex-wrap gap-4 text-sm text-gray-600 animate-fade-in">
+                {indexType !== 'evi' && (
+                  <div className="flex items-center gap-2 animate-slide-up">
+                    <div className="w-3 h-3 rounded-full bg-green-500" />
+                    <span>NDVI - Indice de végétation par différence normalisée</span>
                   </div>
-                  <div className="overflow-x-auto animate-fade-in">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-gray-200 text-left text-gray-500">
-                          <th className="pb-2 font-medium">Exploitation</th>
-                          <th className="pb-2 font-medium">Culture</th>
-                          <th className="pb-2 font-medium">Surface</th>
-                          <th className="pb-2 font-medium">NDVI Actuel</th>
-                          <th className="pb-2 font-medium">Évolution (30j)</th>
-                          <th className="pb-2 font-medium">vs Moyenne</th>
-                          <th className="pb-2 font-medium">Statut</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {mockFields.map((field, i) => (
-                          <tr key={i} className="border-b border-gray-100 hover:bg-gray-50 animate-fade-in" style={{ animationDelay: `${i * 50}ms` }}>
-                            <td className="py-3 font-medium">{field.name}</td>
-                            <td className="py-3">{field.crop}</td>
-                            <td className="py-3">{field.area}</td>
-                            <td className="py-3 font-semibold text-gray-900">{field.lastNDVI.toFixed(2)}</td>
-                            <td className="py-3">
-                              <span className={cn('font-medium', field.lastNDVI > 0.75 ? 'text-green-600' : field.lastNDVI > 0.5 ? 'text-orange-600' : 'text-red-600')}>
-                                {field.lastNDVI > 0.75 ? '+' : field.lastNDVI > 0.5 ? '±' : '-'}${(Math.random() * 0.1).toFixed(2)}
-                              </span>
-                            </td>
-                            <td className="py-3">
-                              <span className={cn('font-medium', field.lastNDVI > 0.7 ? 'text-green-600' : field.lastNDVI > 0.5 ? 'text-orange-600' : 'text-red-600')}>
-                                {field.lastNDVI > 0.7 ? '+' : field.lastNDVI > 0.5 ? '±' : '-'}${(Math.random() * 0.15).toFixed(2)}
-                              </span>
-                            </td>
-                            <td className="py-3">
-                              <Badge variant={
-                                field.status === 'excellent' ? 'success' :
-                                field.status === 'good' ? 'info' :
-                                field.status === 'warning' ? 'warning' : 'danger'
-                              } dot>
-                                {getStatusLabel(field.status)}
-                              </Badge>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                )}
+                {indexType !== 'ndvi' && (
+                  <div className="flex items-center gap-2 animate-slide-up" style={{ animationDelay: '100ms' }}>
+                    <div className="w-3 h-3 rounded-full bg-blue-500" />
+                    <span>EVI - Indice de végétation amélioré (moins sensible à l'atmosphère)</span>
                   </div>
-                </ChartCard>
-              </StaggeredContainer>
-            </RevealOnScroll>
-          </TabsContent>
-        </Tabs>
-      </RevealOnScroll>
+                )}
+              </div>
+            </ChartCard>
+
+            {/* Monthly Stats */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 animate-stagger-slide-up">
+              {[
+                { label: 'NDVI Max', value: '0.85', month: 'Juillet', icon: Sun, color: 'text-yellow-600', bgColor: 'bg-yellow-100' },
+                { label: 'NDVI Min', value: '0.15', month: 'Janvier', icon: Cloud, color: 'text-gray-600', bgColor: 'bg-gray-100' },
+                { label: 'Amplitude', value: '0.70', month: 'Annuelle', icon: BarChart3, color: 'text-blue-600', bgColor: 'bg-blue-100' },
+                { label: 'Pente croissance', value: '+0.07/mois', month: 'Avril-Juin', icon: TrendingUp, color: 'text-green-600', bgColor: 'bg-green-100' },
+              ].map((stat, i) => (
+                <Card key={i} variant="elevated" className="hover-lift text-center animate-fade-in" style={{ animationDelay: `${i * 80}ms` }}>
+                  <CardContent className="p-6 animate-fade-in" style={{ animationDelay: '50ms' }}>
+                    <div className={cn('p-2 rounded-xl mx-auto mb-3 w-14 h-14', stat.bgColor)}>
+                      <stat.icon className={cn('w-8 h-8', stat.color)} />
+                    </div>
+                    <p className="text-2xl font-bold text-gray-900 animate-count-up">{stat.value}</p>
+                    <p className="text-sm text-gray-500">{stat.label}</p>
+                    <p className="text-xs text-gray-400">{stat.month}</p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* Anomalies Tab */}
+        <TabsContent value="anomalies" transition="slide">
+          <div className="mt-6 space-y-6 animate-stagger-slide-up">
+            <ChartCard
+              title="Détection d'anomalies végétatives"
+              icon={<AlertTriangle className="w-5 h-5" />}
+              delay={0}
+            >
+              <div className="space-y-4">
+                <AnomalyCard
+                  anomaly={{
+                    title: 'Baisse anormale du NDVI détectée',
+                    description: 'Le NDVI a chuté de 0.82 à 0.65 en 2 semaines sur South Field 3 (Soybean). Cette baisse de 21% dépasse le seuil de variation normale (±10%).',
+                    icon: AlertTriangle,
+                    iconColor: 'text-orange-600',
+                    iconBg: 'bg-orange-100',
+                    borderColor: 'border-orange-400',
+                    badges: [
+                      { variant: 'warning', label: 'Attention' },
+                      { variant: 'info', label: 'Hydrique probable' },
+                    ],
+                    action: 'Analyser',
+                    time: '3 jours ago'
+                  }}
+                  delay={0}
+                />
+                <AnomalyCard
+                  anomaly={{
+                    title: 'Démarrage précoce de saison',
+                    description: 'Le NDVI a atteint 0.45 au 1er mai sur North Field 1, soit 2 semaines avant la moyenne historique (0.35). Indicateur de conditions printanières favorables.',
+                    icon: Info,
+                    iconColor: 'text-blue-600',
+                    iconBg: 'bg-blue-100',
+                    borderColor: 'border-blue-400',
+                    badges: [
+                      { variant: 'info', label: 'Favorable' },
+                      { variant: 'success', label: 'Croissance avancée' },
+                    ],
+                    action: null,
+                    time: '1 semaine ago'
+                  }}
+                  delay={100}
+                />
+                <AnomalyCard
+                  anomaly={{
+                    title: 'Hétérogénéité intra-parcellaire',
+                    description: 'Variabilité du NDVI de 0.15 observée dans East Field 2 (coefficient de variation 18%). Zones potentiellement touchées par compaction ou drainage insuffisant.',
+                    icon: MapPin,
+                    iconColor: 'text-gray-600',
+                    iconBg: 'bg-gray-100',
+                    borderColor: 'border-gray-400',
+                    badges: [
+                      { variant: 'default', label: 'Investigation' },
+                    ],
+                    action: 'Voir carte',
+                    time: '5 jours ago'
+                  }}
+                  delay={200}
+                />
+              </div>
+            </ChartCard>
+
+            {/* Anomaly Detection Info */}
+            <ChartCard
+              title="Méthodologie de détection"
+              icon={<Info className="w-5 h-5" />}
+              delay={100}
+            >
+              <div className="space-y-3 text-sm text-gray-600 animate-fade-in">
+                <p>Les anomalies sont détectées par comparaison aux :</p>
+                <ul className="list-disc list-inside space-y-2 ml-4">
+                  <li>Moyennes historiques sur 5-10 ans (climatologie)</li>
+                  <li>Seuils de variation intra-saisonnière normaux (±10-15%)</li>
+                  <li>Modèles de phénologie spécifiques aux cultures</li>
+                  <li>Indices complémentaires (EVI, SAVI) pour confirmation</li>
+                </ul>
+                <p className="text-orange-600 flex items-center gap-1">
+                  <AlertTriangle className="w-4 h-4" />
+                  Une variation du NDVI ne doit pas être automatiquement interprétée comme une maladie ou une carence.
+                  Elle constitue un signal nécessitant une interprétation agronomique complémentaire (sol, météo, pratiques).
+                </p>
+              </div>
+            </ChartCard>
+          </div>
+        </TabsContent>
+
+        {/* Comparison Tab */}
+        <TabsContent value="comparison" transition="slide">
+          <div className="mt-6 space-y-6 animate-stagger-slide-up">
+            <ChartCard
+              title="Comparaison inter-parcellaire"
+              icon={<Target className="w-5 h-5" />}
+              delay={0}
+            >
+              <div className="h-96 mb-6">
+                <AnimatedBarChart
+                  data={mockFields.map(f => ({ name: f.name, ndvi: f.lastNDVI }))}
+                />
+              </div>
+              <div className="overflow-x-auto animate-fade-in">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-200 text-left text-gray-500">
+                      <th className="pb-2 font-medium">Exploitation</th>
+                      <th className="pb-2 font-medium">Culture</th>
+                      <th className="pb-2 font-medium">Surface</th>
+                      <th className="pb-2 font-medium">NDVI Actuel</th>
+                      <th className="pb-2 font-medium">Évolution (30j)</th>
+                      <th className="pb-2 font-medium">vs Moyenne</th>
+                      <th className="pb-2 font-medium">Statut</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {mockFields.map((field, i) => (
+                      <tr key={i} className="border-b border-gray-100 hover:bg-gray-50 animate-fade-in" style={{ animationDelay: `${i * 50}ms` }}>
+                        <td className="py-3 font-medium">{field.name}</td>
+                        <td className="py-3">{field.crop}</td>
+                        <td className="py-3">{field.area}</td>
+                        <td className="py-3 font-semibold text-gray-900">{field.lastNDVI.toFixed(2)}</td>
+                        <td className="py-3">
+                          <span className={cn('font-medium', field.lastNDVI > 0.75 ? 'text-green-600' : field.lastNDVI > 0.5 ? 'text-orange-600' : 'text-red-600')}>
+                            {field.lastNDVI > 0.75 ? '+' : field.lastNDVI > 0.5 ? '±' : '-'}${(Math.random() * 0.1).toFixed(2)}
+                          </span>
+                        </td>
+                        <td className="py-3">
+                          <span className={cn('font-medium', field.lastNDVI > 0.7 ? 'text-green-600' : field.lastNDVI > 0.5 ? 'text-orange-600' : 'text-red-600')}>
+                            {field.lastNDVI > 0.7 ? '+' : field.lastNDVI > 0.5 ? '±' : '-'}${(Math.random() * 0.15).toFixed(2)}
+                          </span>
+                        </td>
+                        <td className="py-3">
+                          <Badge variant={
+                            field.status === 'excellent' ? 'success' :
+                            field.status === 'good' ? 'info' :
+                            field.status === 'warning' ? 'warning' : 'danger'
+                          } dot>
+                            {getStatusLabel(field.status)}
+                          </Badge>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </ChartCard>
+          </div>
+        </TabsContent>
+      </Tabs>
     </AnimatedPage>
   )
 }
